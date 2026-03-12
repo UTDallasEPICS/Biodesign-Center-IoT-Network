@@ -79,3 +79,5 @@ if __name__ == "__main__":
     raw_input = "01 01 01 01 02 01 00 01 C5 02 00 00 00"
     decoded_data = decode_lora(raw_input)
     print(json.dumps(decoded_data, indent=2))
+    with open('test.json', 'w') as f:
+        json.dump(decoded_data, f, indent=4)
