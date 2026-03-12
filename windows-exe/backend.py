@@ -41,6 +41,8 @@ def grafana_push(data):
         )
         response.raise_for_status()
         print("Success")
+        print(response.text)
+        print(payload)
     except Exception as e:
         print(e)
         if hasattr(e, 'response') and e.response is not None:
