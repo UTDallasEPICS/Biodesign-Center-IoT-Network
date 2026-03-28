@@ -21,7 +21,7 @@ def grafana_push(data):
         return "Skipped: decode error"
 
     lab_id = f"Lab_{data['lab_id']}"
-    node_id = f"Node_{data['sensor_id']}"
+    node_id = f"Node_{data['node_id']}"
 
     timestamp = int(time.time() * 1000000000)
 
@@ -109,7 +109,7 @@ def read_from_receiver(log_fn, stop_event):
                             push_result = grafana_push(decoded)
                             packet_count += 1
                             msg_type = decoded.get("msg_type", "unknown")
-                            log_fn(f"Packet #{packet_count}: {msg_type.upper()} | Lab {decoded['lab_id']}, Sensor {decoded['sensor_id']} | Push: {push_result}")
+                            log_fn(f"Packet #{packet_count}: {msg_type.upper()} | Lab {decoded['lab_id']}, Node {decoded['node_id']} | Push: {push_result}")
                         else:
                             log_fn(f"Decode error: {decoded['error']}")
                     except Exception as e:
