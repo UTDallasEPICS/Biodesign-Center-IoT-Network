@@ -1,10 +1,11 @@
 import tkinter as tk
 import threading
 import time
-import random
-import requests
+import serial
+import serial.tools.list_ports
 import os
 from dotenv import load_dotenv
+from hex_parse import decode_lora
 
 load_dotenv()
 GRAFANA_URL = os.getenv("GRAFANA_URL")
@@ -19,7 +20,7 @@ def grafana_push(data):
         return
 
     lab_id = f"Lab_{data['lab_id']}"
-    node_id = f"Node_{data['node_id']}"
+    node_id = f"Node_{data['sensor_id']}"
 
     timestamp = int(time.time() * 1000000000)
 
@@ -39,64 +40,122 @@ def grafana_push(data):
     payload = "\n".join(lines)
 
     try:
+        import requests
         requests.post(GRAFANA_URL, auth=(USERNAME, PASSWORD), data=payload)
     except Exception:
         pass
 
-def run_simulation(minutes, status_label, button):
-    duration_seconds = minutes * 60
-    start_time = time.time()
-    interval = 5 
-    
-    button.config(state="disabled")
+def find_receiver_port():
+    """Auto-detect RP2040 receiver on COM port"""
+    ports = serial.tools.list_ports.comports()
+    for port in ports:
+        if "RP2040" in port.description or "CircuitPython" in port.description or (port.manufacturer and "Adafruit" in port.manufacturer):
+            return port.device
+    # Fallback: try common COM ports
+    for com_port in ["COM3", "COM4", "COM5", "COM6", "COM7", "COM8"]:
+        try:
+            s = serial.Serial(com_port, timeout=0.1)
+            s.close()
+            return com_port
+        except:
+            pass
+    return None
 
-    while (time.time() - start_time) < duration_seconds:
-        remaining_seconds = int(duration_seconds - (time.time() - start_time))
-        status_label.after(0, lambda r=remaining_seconds: status_label.config(text=f"🔴 Live: Sending data... ({r}s remaining)"))
+def read_from_receiver(status_label, stop_event):
+    """Read LoRa packets from the receiver via USB serial"""
+    port = find_receiver_port()
 
-        temp = round(random.uniform(3.8, 5.2), 2)
-        fridge_door = random.choices([0.0, 1.0], weights=[0.95, 0.05])[0]
-        fridge_data = {
-            "lab_id": 1, "node_id": 1,
-            "channels": [
-                {"metric": "temperature_celsius", "value": temp},
-                {"metric": "door_open", "value": fridge_door}
-            ]
-        }
-        grafana_push(fridge_data)
+    if not port:
+        status_label.after(0, lambda: status_label.config(text="❌ Receiver not found. Check USB connection."))
+        return
 
-        for current_node_id in [2, 3, 4]:
-            door_status = random.choices([0.0, 1.0], weights=[0.90, 0.10])[0]
-            door_data = {
-                "lab_id": 1, "node_id": current_node_id,
-                "channels": [{"metric": "door_open", "value": door_status}]
-            }
-            grafana_push(door_data)
-        
-        time.sleep(interval)
-
-    status_label.after(0, lambda: status_label.config(text="✅ Live Simulation Complete!"))
-    button.after(0, lambda: button.config(state="normal"))
-
-def button_click():
+    ser = None
     try:
-        minutes = int(entry.get())
-        threading.Thread(target=run_simulation, args=(minutes, label, button), daemon=True).start()
-    except ValueError:
-        label.config(text="Please enter a valid number.")
+        ser = serial.Serial(port, 115200, timeout=1)
+        status_label.after(0, lambda: status_label.config(text=f"✅ Connected to {port}"))
+
+        packet_count = 0
+
+        while not stop_event.is_set() and ser.is_open:
+            try:
+                if ser.in_waiting:
+                    line = ser.readline().decode('utf-8', errors='ignore').strip()
+
+                    if not line or line.startswith("["):
+                        continue
+
+                    # Treat line as hex string
+                    hex_str = line.replace(" ", "").upper()
+
+                    try:
+                        decoded = decode_lora(hex_str)
+
+                        if "error" not in decoded:
+                            grafana_push(decoded)
+                            packet_count += 1
+
+                            msg_type = decoded.get("msg_type", "unknown")
+                            status_label.after(0, lambda m=msg_type, l=decoded['lab_id'], s=decoded['sensor_id'], c=packet_count:
+                                status_label.config(text=f"📡 {m.upper()} | Lab {l}, Sensor {s} | Packets: {c}"))
+                    except:
+                        pass
+                else:
+                    time.sleep(0.1)
+
+            except Exception as e:
+                status_label.after(0, lambda e=str(e): status_label.config(text=f"⚠️ {e}"))
+                time.sleep(1)
+
+    except serial.SerialException as e:
+        status_label.after(0, lambda: status_label.config(text=f"❌ Connection failed: {str(e)}"))
+    finally:
+        if ser:
+            ser.close()
+        status_label.after(0, lambda: status_label.config(text="🛑 Stopped"))
+
+class ReceiverApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Biodesign LoRa Receiver → Grafana")
+        self.root.geometry("480x200")
+        self.stop_event = threading.Event()
+        self.reader_thread = None
+
+        title = tk.Label(root, text="LoRa Receiver Data Stream", font=("Arial", 12, "bold"))
+        title.pack(pady=(10, 5))
+
+        self.label = tk.Label(root, text="Ready to connect to receiver...", wraplength=450, justify="center", font=("Arial", 10))
+        self.label.pack(pady=10)
+
+        button_frame = tk.Frame(root)
+        button_frame.pack(pady=15)
+
+        self.start_btn = tk.Button(button_frame, text="Start Stream", command=self.start_stream,
+                                   bg="#4CAF50", fg="white", font=("Arial", 10, "bold"), width=18, padx=10)
+        self.start_btn.pack(side="left", padx=5)
+
+        self.stop_btn = tk.Button(button_frame, text="Stop Stream", command=self.stop_stream,
+                                  bg="#f44336", fg="white", font=("Arial", 10, "bold"), width=18, padx=10, state="disabled")
+        self.stop_btn.pack(side="left", padx=5)
+
+        status_frame = tk.Frame(root)
+        status_frame.pack(pady=5)
+        tk.Label(status_frame, text="Status: Pushing to Grafana at " + (GRAFANA_URL or "N/A"), font=("Arial", 8), fg="gray").pack()
+
+    def start_stream(self):
+        self.stop_event.clear()
+        self.reader_thread = threading.Thread(target=read_from_receiver,
+                                              args=(self.label, self.stop_event),
+                                              daemon=True)
+        self.reader_thread.start()
+        self.start_btn.config(state="disabled")
+        self.stop_btn.config(state="normal")
+
+    def stop_stream(self):
+        self.stop_event.set()
+        self.start_btn.config(state="normal")
+        self.stop_btn.config(state="disabled")
 
 root = tk.Tk()
-root.title("Biodesign Live Sensor Stream")
-root.geometry("320x160")
-
-label = tk.Label(root, text="Enter minutes to stream live data:")
-label.pack(pady=(15, 5))
-
-entry = tk.Entry(root, justify="center")
-entry.insert(0, "5")
-entry.pack(pady=5)
-
-button = tk.Button(root, text="Start Live Stream", command=button_click, bg="#2196F3", fg="white", font=("Arial", 10, "bold"))
-button.pack(pady=10)
-
+app = ReceiverApp(root)
 root.mainloop()
