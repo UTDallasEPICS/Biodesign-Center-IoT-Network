@@ -23,26 +23,27 @@ def grafana_push(data):
     lab_id = f"Lab_{data['lab_id']}"
     node_id = f"Node_{data['node_id']}"
 
-    timestamp = int(time.time() * 1000000000)
-
-    lines = []
+    metrics = []
     for channel in data["channels"]:
-        metric = channel["metric"]
         value = channel["value"]
-
         if type(value) == bool:
             value = 1.0 if value else 0.0
         else:
             value = float(value)
 
-        line = f"biodesign_sensors,lab={lab_id},node_id={node_id},metric={metric} reading={value} {timestamp}"
-        lines.append(line)
-
-    payload = "\n".join(lines)
+        metrics.append({
+            "name": f"biodesign_{channel['metric']}",
+            "labels": {"lab": lab_id, "node_id": node_id},
+            "value": value,
+        })
 
     try:
-        import requests
-        resp = requests.post(GRAFANA_CLOUD_URL, auth=(GRAFANA_CLOUD_USERNAME, GRAFANA_CLOUD_API_TOKEN), data=payload)
+        from prometheus_remote_write import send
+        resp = send(
+            url=GRAFANA_CLOUD_URL,
+            auth=(GRAFANA_CLOUD_USERNAME, GRAFANA_CLOUD_API_TOKEN),
+            metrics=metrics,
+        )
         return f"{resp.status_code} {resp.reason}"
     except Exception as e:
         return f"Error: {e}"
