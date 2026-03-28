@@ -9,11 +9,12 @@ LAB_ID = 0x01           # Physical lab this node belongs to (1-255, 0 reserved)
 
 # --- Radio ---
 RADIO_FREQ_MHZ = 915.0  # Hz. Must match receiver exactly.
-TX_POWER       = 13     # dBm (5-23). Keep low if USB disconnects during TX.
+TX_POWER       = 5     # dBm (5-23). Keep low if USB disconnects during TX.
 
 # --- Timing ---
-HEARTBEAT_INTERVAL = 30  # Seconds. Heartbeat sent if no event in this window.
-POLL_INTERVAL      = 1   # Seconds between sensor reads.
+HEARTBEAT_INTERVAL    = 30    # Seconds. Heartbeat sent if no event in this window.
+POLL_INTERVAL         = 1     # Seconds between sensor reads.
+PERIODIC_SEND_INTERVAL = 15   # TEMPORARY: send all readings every N seconds regardless of events.
 
 # --- Sensor Definitions ---
 # Each entry describes one physical sensor enclosure monitored by this node.
@@ -37,7 +38,7 @@ SENSORS = [
         "sensor_id": 0x01,
         "channels": ["temperature", "door"],
         "thresholds": {
-            "temperature": 5.0,   # °C — crossing triggers an immediate data send
+            "temperature": 10.0,   # °C — crossing triggers an immediate data send
         },
     },
 ]
