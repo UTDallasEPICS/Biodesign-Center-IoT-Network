@@ -1,6 +1,7 @@
 import tkinter as tk
 import threading
 import time
+from datetime import datetime
 import serial
 import serial.tools.list_ports
 import os
@@ -14,10 +15,10 @@ GRAFANA_CLOUD_API_TOKEN = os.getenv("GRAFANA_CLOUD_API_TOKEN")
 
 def grafana_push(data):
     if not GRAFANA_CLOUD_API_TOKEN:
-        return
+        return "No API token configured"
 
     if "error" in data:
-        return
+        return "Skipped: decode error"
 
     lab_id = f"Lab_{data['lab_id']}"
     node_id = f"Node_{data['sensor_id']}"
@@ -41,9 +42,10 @@ def grafana_push(data):
 
     try:
         import requests
-        requests.post(GRAFANA_CLOUD_URL, auth=(GRAFANA_CLOUD_USERNAME, GRAFANA_CLOUD_API_TOKEN), data=payload)
-    except Exception:
-        pass
+        resp = requests.post(GRAFANA_CLOUD_URL, auth=(GRAFANA_CLOUD_USERNAME, GRAFANA_CLOUD_API_TOKEN), data=payload)
+        return f"{resp.status_code} {resp.reason}"
+    except Exception as e:
+        return f"Error: {e}"
 
 def find_receiver_port():
     """Auto-detect RP2040 receiver on COM port"""
@@ -61,7 +63,7 @@ def find_receiver_port():
             pass
     return None
 
-def read_from_receiver(status_label, stop_event):
+def read_from_receiver(status_label, log_label, stop_event):
     """Read LoRa packets from the receiver via USB serial"""
     port = find_receiver_port()
 
@@ -91,12 +93,15 @@ def read_from_receiver(status_label, stop_event):
                         decoded = decode_lora(hex_str)
 
                         if "error" not in decoded:
-                            grafana_push(decoded)
+                            push_result = grafana_push(decoded)
                             packet_count += 1
+                            push_time = datetime.now().strftime("%H:%M:%S")
 
                             msg_type = decoded.get("msg_type", "unknown")
                             status_label.after(0, lambda m=msg_type, l=decoded['lab_id'], s=decoded['sensor_id'], c=packet_count:
                                 status_label.config(text=f"📡 {m.upper()} | Lab {l}, Sensor {s} | Packets: {c}"))
+                            log_label.after(0, lambda t=push_time, r=push_result:
+                                log_label.config(text=f"Last push: {t} | Response: {r}"))
                     except:
                         pass
                 else:
@@ -140,12 +145,13 @@ class ReceiverApp:
 
         status_frame = tk.Frame(root)
         status_frame.pack(pady=5)
-        tk.Label(status_frame, text="Status: Pushing to Grafana at " + (GRAFANA_CLOUD_URL or "N/A"), font=("Arial", 8), fg="gray").pack()
+        self.log_label = tk.Label(status_frame, text="Pushing to " + (GRAFANA_CLOUD_URL or "N/A"), font=("Arial", 8), fg="gray")
+        self.log_label.pack()
 
     def start_stream(self):
         self.stop_event.clear()
         self.reader_thread = threading.Thread(target=read_from_receiver,
-                                              args=(self.label, self.stop_event),
+                                              args=(self.label, self.log_label, self.stop_event),
                                               daemon=True)
         self.reader_thread.start()
         self.start_btn.config(state="disabled")
