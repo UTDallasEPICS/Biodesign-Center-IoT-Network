@@ -20,7 +20,7 @@ PERIODIC_SEND_INTERVAL = 15   # TEMPORARY: send all readings every N seconds reg
 # Each entry describes one physical sensor enclosure monitored by this node.
 #
 # Fields:
-#   sensor_id : int  (1-255)  Unique ID matching the physical label on the enclosure.
+#   node_id : int  (1-255)  Unique ID matching the physical label on the enclosure.
 #   channels  : list[str]     Which channel types this sensor reports.
 #                             Supported now : "temperature", "door"
 #                             Reserved      : "light_level", "light_event",
@@ -35,7 +35,7 @@ PERIODIC_SEND_INTERVAL = 15   # TEMPORARY: send all readings every N seconds reg
 
 SENSORS = [
     {
-        "sensor_id": 0x01,
+        "node_id": 0x01,
         "channels": ["temperature", "door"],
         "thresholds": {
             "temperature": 10.0,   # °C — crossing triggers an immediate data send

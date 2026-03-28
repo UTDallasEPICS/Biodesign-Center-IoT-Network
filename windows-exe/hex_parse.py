@@ -30,7 +30,7 @@ def decode_lora(hex_string):
     packet = {
         "version": data[0],
         "lab_id": data[1],
-        "sensor_id": data[2],
+        "node_id": data[2],
         "msg_type": msg_type_str,
         "channel_count": data[4],
         "channels": []

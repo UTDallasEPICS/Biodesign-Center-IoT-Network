@@ -6,7 +6,7 @@
 # to USB serial. Readable via: screen /dev/ttyACM0
 #
 # Output columns:
-#   [timestamp]  MSG_TYPE  lab=NN sensor=NN  <channel readings>  RSSI=NdBm
+#   [timestamp]  MSG_TYPE  lab=NN node=NN  <channel readings>  RSSI=NdBm
 
 import time
 import board
@@ -80,11 +80,11 @@ while True:
         ch_parts  = [_fmt_channel(n, v) for n, v in pkt["channels"]]
         ch_str    = "  ".join(ch_parts) if ch_parts else "(no channels)"
 
-        print("[{:8.1f}s] {}  lab={:02d} sensor={:02d}  {:<36s}  RSSI={:+d}dBm".format(
+        print("[{:8.1f}s] {}  lab={:02d} node={:02d}  {:<36s}  RSSI={:+d}dBm".format(
             ts,
             label,
             pkt["lab_id"],
-            pkt["sensor_id"],
+            pkt["node_id"],
             ch_str,
             rssi,
         ))

@@ -15,7 +15,7 @@ def grafana_push(data):
         return
 
     lab_id = f"Lab_{data['lab_id']}"
-    sensor_id = f"Node_{data['sensor_id']}"
+    node_id = f"Node_{data['node_id']}"
     timestamp = int(time.time() * 1000000000)
 
     lines = []
@@ -28,7 +28,7 @@ def grafana_push(data):
         else:
             value = float(value)
 
-        line = f"biodesign_sensors,lab={lab_id},sensor_id={sensor_id},metric={metric} reading={value} {timestamp}"
+        line = f"biodesign_sensors,lab={lab_id},node_id={node_id},metric={metric} reading={value} {timestamp}"
         lines.append(line)
 
     payload = "\n".join(lines)

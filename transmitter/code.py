@@ -38,8 +38,8 @@ print("Radio ready  freq={} MHz  lab={:#04x}  tx_power={} dBm".format(
     RADIO_FREQ_MHZ, LAB_ID, TX_POWER
 ))
 for s in SENSORS:
-    print("  sensor={:#04x}  channels={}  thresholds={}".format(
-        s["sensor_id"], s["channels"], s.get("thresholds", {})
+    print("  node={:#04x}  channels={}  thresholds={}".format(
+        s["node_id"], s["channels"], s.get("thresholds", {})
     ))
 
 # ---------------------------------------------------------------------------
@@ -51,7 +51,7 @@ for s in SENSORS:
 
 sensor_states = {}
 for _s in SENSORS:
-    sensor_states[_s["sensor_id"]] = {
+    sensor_states[_s["node_id"]] = {
         "last_sent": 0.0,
         "last_door": None,
         "last_temp": None,
@@ -85,7 +85,7 @@ while True:
     now = time.monotonic()
 
     for sensor_def in SENSORS:
-        sid        = sensor_def["sensor_id"]
+        sid        = sensor_def["node_id"]
         state      = sensor_states[sid]
         thresholds = sensor_def.get("thresholds", {})
         readings   = _read_channels(sensor_def)

@@ -8,7 +8,7 @@ DONE
 - Transmitter node (CircuitPython): edge-triggered sends, threshold crossing,
   per-sensor heartbeat timer, mock temperature + door sensors
 - Receiver node (CircuitPython): decode and print formatted output to USB serial
-- Human-readable per-node config (config.py): lab ID, sensor IDs, channel list,
+- Human-readable per-node config (config.py): lab ID, node IDs, channel list,
   thresholds, radio settings
 
 IN PROGRESS
@@ -22,7 +22,7 @@ TODO
     Planned approach: random backoff before each transmit (CSMA-style).
     On no-ACK, retransmit after a random delay, with exponential backoff up to a
     max retry count. Requires ACK support on the receiver side (receiver sends a
-    short ACK packet keyed on lab_id + sensor_id + a sequence number).
+    short ACK packet keyed on lab_id + node_id + a sequence number).
     Sequence numbers are not currently in the packet header and will need to be
     added (suggests a protocol v2 header change, or an optional header extension).
 

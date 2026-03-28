@@ -85,7 +85,7 @@ def encode_channel(channel_name, value):
         raise ValueError("Unhandled channel: {}".format(channel_name))
 
 
-def encode_packet(lab_id, sensor_id, msg_type, channels=None):
+def encode_packet(lab_id, node_id, msg_type, channels=None):
     """
     Build a complete packet.
 
@@ -104,7 +104,7 @@ def encode_packet(lab_id, sensor_id, msg_type, channels=None):
     header = bytearray([
         PROTOCOL_VERSION,
         lab_id,
-        sensor_id,
+        node_id,
         msg_type,
         len(channels),
     ])
@@ -121,7 +121,7 @@ def decode_packet(data):
     Returns dict:
       version   : int
       lab_id    : int
-      sensor_id : int
+      node_id   : int
       msg_type  : int
       channels  : list of (channel_name, decoded_value)
 
@@ -132,7 +132,7 @@ def decode_packet(data):
 
     version   = data[0]
     lab_id    = data[1]
-    sensor_id = data[2]
+    node_id   = data[2]
     msg_type  = data[3]
     ch_count  = data[4]
 
@@ -166,7 +166,7 @@ def decode_packet(data):
     return {
         "version":   version,
         "lab_id":    lab_id,
-        "sensor_id": sensor_id,
+        "node_id":   node_id,
         "msg_type":  msg_type,
         "channels":  channels,
     }

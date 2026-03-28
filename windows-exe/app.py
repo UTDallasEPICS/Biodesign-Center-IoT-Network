@@ -19,8 +19,8 @@ def grafana_push(data):
         return
 
     lab_id = f"Lab_{data['lab_id']}"
-    sensor_id = f"Node_{data['sensor_id']}"
-    
+    node_id = f"Node_{data['node_id']}"
+
     timestamp = int(time.time() * 1000000000)
 
     lines = []
@@ -33,7 +33,7 @@ def grafana_push(data):
         else:
             value = float(value)
 
-        line = f"biodesign_sensors,lab={lab_id},sensor_id={sensor_id},metric={metric} reading={value} {timestamp}"
+        line = f"biodesign_sensors,lab={lab_id},node_id={node_id},metric={metric} reading={value} {timestamp}"
         lines.append(line)
 
     payload = "\n".join(lines)
@@ -57,7 +57,7 @@ def run_simulation(minutes, status_label, button):
         temp = round(random.uniform(3.8, 5.2), 2)
         fridge_door = random.choices([0.0, 1.0], weights=[0.95, 0.05])[0]
         fridge_data = {
-            "lab_id": 1, "sensor_id": 1,
+            "lab_id": 1, "node_id": 1,
             "channels": [
                 {"metric": "temperature_celsius", "value": temp},
                 {"metric": "door_open", "value": fridge_door}
@@ -65,10 +65,10 @@ def run_simulation(minutes, status_label, button):
         }
         grafana_push(fridge_data)
 
-        for node_id in [2, 3, 4]:
+        for current_node_id in [2, 3, 4]:
             door_status = random.choices([0.0, 1.0], weights=[0.90, 0.10])[0]
             door_data = {
-                "lab_id": 1, "sensor_id": node_id,
+                "lab_id": 1, "node_id": current_node_id,
                 "channels": [{"metric": "door_open", "value": door_status}]
             }
             grafana_push(door_data)
