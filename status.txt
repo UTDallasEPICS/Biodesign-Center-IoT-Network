@@ -1,20 +1,6 @@
 Biodesign Center IoT Network — Project Status
 ==============================================
 
-DONE
-----
-- Protocol v1 packet spec (header + channel blocks, variable channel count)
-- Packet encode/decode (packet.py, shared between transmitter and receiver)
-- Transmitter node (CircuitPython): edge-triggered sends, threshold crossing,
-  per-sensor heartbeat timer, mock temperature + door sensors
-- Receiver node (CircuitPython): decode and print formatted output to USB serial
-- Human-readable per-node config (config.py): lab ID, node IDs, channel list,
-  thresholds, radio settings
-
-IN PROGRESS
------------
-- (nothing active)
-
 TODO
 ----
 - Collision detection and retry
@@ -26,16 +12,6 @@ TODO
     Sequence numbers are not currently in the packet header and will need to be
     added (suggests a protocol v2 header change, or an optional header extension).
 
-- Replace mock sensors with real hardware reads
-    sensors.py read_temperature() and read_door() have placeholder bodies.
-    Swap with ADC reads / GPIO reads when hardware is available.
-
-- Host-side parser
-    Receiver currently prints human-readable lines over USB serial.
-    A host Python script should parse this output (or switch receiver output
-    to JSON for easier machine parsing).
-
-- Multi-lab support
-    lab_id is configurable but untested with values other than 1.
-
 - Over-the-air configuration or firmware update strategy (longer term)
+
+- Real grafana push
