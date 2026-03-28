@@ -2,4 +2,3 @@ pyinstaller
 python-dotenv
 pyserial
 requests
-prometheus-remote-write

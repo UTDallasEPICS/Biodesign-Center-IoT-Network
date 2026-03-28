@@ -6,7 +6,7 @@ import os
 
 load_dotenv()
 
-GRAFANA_CLOUD_URL = os.getenv("GRAFANA_CLOUD_URL", "https://prometheus-prod-66-prod-us-east-3.grafana.net/api/prom/push")
+GRAFANA_CLOUD_URL = os.getenv("GRAFANA_CLOUD_URL", "https://prometheus-prod-66-prod-us-east-3.grafana.net/api/v1/push/influx/write")
 GRAFANA_CLOUD_USERNAME = os.getenv("GRAFANA_CLOUD_USERNAME", "2988310")
 GRAFANA_CLOUD_API_TOKEN = os.getenv("GRAFANA_CLOUD_API_TOKEN")
 
@@ -19,7 +19,7 @@ def grafana_push(data):
         return
 
     lab_id = f"Lab_{data['lab_id']}"
-    node_id = f"Node_{data['sensor_id']}"
+    node_id = f"Node_{data['node_id']}"
     timestamp = int(time.time() * 1000000000)
 
     lines = []

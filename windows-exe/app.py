@@ -5,11 +5,12 @@ from datetime import datetime
 import serial
 import serial.tools.list_ports
 import os
+import requests
 from dotenv import load_dotenv
 from hex_parse import decode_lora
 
 load_dotenv()
-GRAFANA_CLOUD_URL = os.getenv("GRAFANA_CLOUD_URL", "https://prometheus-prod-66-prod-us-east-3.grafana.net/api/prom/push")
+GRAFANA_CLOUD_URL = os.getenv("GRAFANA_CLOUD_URL", "https://prometheus-prod-66-prod-us-east-3.grafana.net/api/v1/push/influx/write")
 GRAFANA_CLOUD_USERNAME = os.getenv("GRAFANA_CLOUD_USERNAME", "2988310")
 GRAFANA_CLOUD_API_TOKEN = os.getenv("GRAFANA_CLOUD_API_TOKEN")
 
@@ -23,7 +24,9 @@ def grafana_push(data):
     lab_id = f"Lab_{data['lab_id']}"
     node_id = f"Node_{data['node_id']}"
 
-    metrics = []
+    timestamp = int(time.time() * 1000000000)
+
+    lines = []
     for channel in data["channels"]:
         value = channel["value"]
         if type(value) == bool:
@@ -31,18 +34,16 @@ def grafana_push(data):
         else:
             value = float(value)
 
-        metrics.append({
-            "name": f"biodesign_{channel['metric']}",
-            "labels": {"lab": lab_id, "node_id": node_id},
-            "value": value,
-        })
+        line = f"biodesign_sensors,lab={lab_id},node_id={node_id},metric={channel['metric']} reading={value} {timestamp}"
+        lines.append(line)
+
+    payload = "\n".join(lines)
 
     try:
-        from prometheus_remote_write import send
-        resp = send(
-            url=GRAFANA_CLOUD_URL,
+        resp = requests.post(
+            GRAFANA_CLOUD_URL,
             auth=(GRAFANA_CLOUD_USERNAME, GRAFANA_CLOUD_API_TOKEN),
-            metrics=metrics,
+            data=payload,
         )
         return f"{resp.status_code} {resp.reason}"
     except Exception as e:
