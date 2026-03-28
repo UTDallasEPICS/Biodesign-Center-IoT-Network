@@ -8,12 +8,12 @@ from dotenv import load_dotenv
 from hex_parse import decode_lora
 
 load_dotenv()
-GRAFANA_URL = os.getenv("GRAFANA_URL")
-USERNAME = os.getenv("GRAFANA_USERNAME")
-PASSWORD = os.getenv("GRAFANA_PASSWORD")
+GRAFANA_CLOUD_URL = os.getenv("GRAFANA_CLOUD_URL", "https://prometheus-prod-66-prod-us-east-3.grafana.net/api/prom/push")
+GRAFANA_CLOUD_USERNAME = os.getenv("GRAFANA_CLOUD_USERNAME", "2988310")
+GRAFANA_CLOUD_API_TOKEN = os.getenv("GRAFANA_CLOUD_API_TOKEN")
 
 def grafana_push(data):
-    if not USERNAME or not PASSWORD or not GRAFANA_URL:
+    if not GRAFANA_CLOUD_API_TOKEN:
         return
 
     if "error" in data:
@@ -41,7 +41,7 @@ def grafana_push(data):
 
     try:
         import requests
-        requests.post(GRAFANA_URL, auth=(USERNAME, PASSWORD), data=payload)
+        requests.post(GRAFANA_CLOUD_URL, auth=(GRAFANA_CLOUD_USERNAME, GRAFANA_CLOUD_API_TOKEN), data=payload)
     except Exception:
         pass
 

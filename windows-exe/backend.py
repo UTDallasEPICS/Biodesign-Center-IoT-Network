@@ -6,16 +6,20 @@ import os
 
 load_dotenv()
 
-GRAFANA_URL = os.getenv("GRAFANA_URL")
-USERNAME = os.getenv("GRAFANA_USERNAME")
-PASSWORD = os.getenv("GRAFANA_PASSWORD")
+GRAFANA_CLOUD_URL = os.getenv("GRAFANA_CLOUD_URL", "https://prometheus-prod-66-prod-us-east-3.grafana.net/api/prom/push")
+GRAFANA_CLOUD_USERNAME = os.getenv("GRAFANA_CLOUD_USERNAME", "2988310")
+GRAFANA_CLOUD_API_TOKEN = os.getenv("GRAFANA_CLOUD_API_TOKEN")
 
 def grafana_push(data):
     if "error" in data:
         return
 
+    if not GRAFANA_CLOUD_API_TOKEN:
+        print("Error: GRAFANA_CLOUD_API_TOKEN not set in .env")
+        return
+
     lab_id = f"Lab_{data['lab_id']}"
-    node_id = f"Node_{data['node_id']}"
+    node_id = f"Node_{data['sensor_id']}"
     timestamp = int(time.time() * 1000000000)
 
     lines = []
@@ -35,8 +39,8 @@ def grafana_push(data):
 
     try:
         response = requests.post(
-            GRAFANA_URL,
-            auth=(USERNAME, PASSWORD),
+            GRAFANA_CLOUD_URL,
+            auth=(GRAFANA_CLOUD_USERNAME, GRAFANA_CLOUD_API_TOKEN),
             data=payload
         )
         response.raise_for_status()
