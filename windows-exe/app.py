@@ -140,7 +140,7 @@ class ReceiverApp:
 
         status_frame = tk.Frame(root)
         status_frame.pack(pady=5)
-        tk.Label(status_frame, text="Status: Pushing to Grafana at " + (GRAFANA_URL or "N/A"), font=("Arial", 8), fg="gray").pack()
+        tk.Label(status_frame, text="Status: Pushing to Grafana at " + (GRAFANA_CLOUD_URL or "N/A"), font=("Arial", 8), fg="gray").pack()
 
     def start_stream(self):
         self.stop_event.clear()
