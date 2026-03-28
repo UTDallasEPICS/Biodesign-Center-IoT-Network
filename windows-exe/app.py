@@ -47,93 +47,100 @@ def grafana_push(data):
     except Exception as e:
         return f"Error: {e}"
 
-def find_receiver_port():
+def find_receiver_port(log_fn):
     """Auto-detect RP2040 receiver on COM port"""
     ports = serial.tools.list_ports.comports()
+    log_fn(f"Found {len(ports)} COM port(s)")
     for port in ports:
+        log_fn(f"  {port.device}: {port.description} (mfr: {port.manufacturer})")
         if "RP2040" in port.description or "CircuitPython" in port.description or (port.manufacturer and "Adafruit" in port.manufacturer):
+            log_fn(f"  -> Matched as receiver")
             return port.device
     # Fallback: try common COM ports
+    log_fn("No RP2040 match, trying common COM ports...")
     for com_port in ["COM3", "COM4", "COM5", "COM6", "COM7", "COM8"]:
         try:
             s = serial.Serial(com_port, timeout=0.1)
             s.close()
+            log_fn(f"  {com_port}: open OK, using as fallback")
             return com_port
-        except:
-            pass
+        except Exception as e:
+            log_fn(f"  {com_port}: {e}")
     return None
 
-def read_from_receiver(status_label, log_label, stop_event):
+def read_from_receiver(log_fn, stop_event):
     """Read LoRa packets from the receiver via USB serial"""
-    port = find_receiver_port()
+    log_fn("Searching for receiver...")
+    port = find_receiver_port(log_fn)
 
     if not port:
-        status_label.after(0, lambda: status_label.config(text="❌ Receiver not found. Check USB connection."))
+        log_fn("Receiver not found. Check USB connection.")
         return
 
     ser = None
     try:
         ser = serial.Serial(port, 115200, timeout=1)
-        status_label.after(0, lambda: status_label.config(text=f"✅ Connected to {port}"))
+        log_fn(f"Connected to {port}")
 
         packet_count = 0
 
         while not stop_event.is_set() and ser.is_open:
             try:
                 if ser.in_waiting:
-                    line = ser.readline().decode('utf-8', errors='ignore').strip()
+                    raw = ser.readline()
+                    line = raw.decode('utf-8', errors='ignore').strip()
 
-                    if not line or line.startswith("["):
+                    if not line:
                         continue
 
-                    # Treat line as hex string
+                    if line.startswith("["):
+                        log_fn(f"Serial: {line}")
+                        continue
+
+                    log_fn(f"Raw hex: {line}")
+
                     hex_str = line.replace(" ", "").upper()
 
                     try:
                         decoded = decode_lora(hex_str)
+                        log_fn(f"Decoded: {decoded}")
 
                         if "error" not in decoded:
                             push_result = grafana_push(decoded)
                             packet_count += 1
-                            push_time = datetime.now().strftime("%H:%M:%S")
-
                             msg_type = decoded.get("msg_type", "unknown")
-                            status_label.after(0, lambda m=msg_type, l=decoded['lab_id'], s=decoded['sensor_id'], c=packet_count:
-                                status_label.config(text=f"📡 {m.upper()} | Lab {l}, Sensor {s} | Packets: {c}"))
-                            log_label.after(0, lambda t=push_time, r=push_result:
-                                log_label.config(text=f"Last push: {t} | Response: {r}"))
-                    except:
-                        pass
+                            log_fn(f"Packet #{packet_count}: {msg_type.upper()} | Lab {decoded['lab_id']}, Sensor {decoded['sensor_id']} | Push: {push_result}")
+                        else:
+                            log_fn(f"Decode error: {decoded['error']}")
+                    except Exception as e:
+                        log_fn(f"Decode exception: {e}")
                 else:
                     time.sleep(0.1)
 
             except Exception as e:
-                status_label.after(0, lambda e=str(e): status_label.config(text=f"⚠️ {e}"))
+                log_fn(f"Read error: {e}")
                 time.sleep(1)
 
     except serial.SerialException as e:
-        status_label.after(0, lambda: status_label.config(text=f"❌ Connection failed: {str(e)}"))
+        log_fn(f"Connection failed: {e}")
     finally:
         if ser:
             ser.close()
-        status_label.after(0, lambda: status_label.config(text="🛑 Stopped"))
+        log_fn("Stopped")
 
 class ReceiverApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Biodesign LoRa Receiver → Grafana")
-        self.root.geometry("480x200")
+        self.root.title("Biodesign LoRa Receiver -> Grafana")
+        self.root.geometry("600x400")
         self.stop_event = threading.Event()
         self.reader_thread = None
 
         title = tk.Label(root, text="LoRa Receiver Data Stream", font=("Arial", 12, "bold"))
         title.pack(pady=(10, 5))
 
-        self.label = tk.Label(root, text="Ready to connect to receiver...", wraplength=450, justify="center", font=("Arial", 10))
-        self.label.pack(pady=10)
-
         button_frame = tk.Frame(root)
-        button_frame.pack(pady=15)
+        button_frame.pack(pady=5)
 
         self.start_btn = tk.Button(button_frame, text="Start Stream", command=self.start_stream,
                                    bg="#4CAF50", fg="white", font=("Arial", 10, "bold"), width=18, padx=10)
@@ -143,15 +150,32 @@ class ReceiverApp:
                                   bg="#f44336", fg="white", font=("Arial", 10, "bold"), width=18, padx=10, state="disabled")
         self.stop_btn.pack(side="left", padx=5)
 
-        status_frame = tk.Frame(root)
-        status_frame.pack(pady=5)
-        self.log_label = tk.Label(status_frame, text="Pushing to " + (GRAFANA_CLOUD_URL or "N/A"), font=("Arial", 8), fg="gray")
-        self.log_label.pack()
+        log_frame = tk.Frame(root)
+        log_frame.pack(fill="both", expand=True, padx=10, pady=(5, 10))
+
+        self.log_text = tk.Text(log_frame, font=("Consolas", 9), state="disabled", wrap="word", bg="#1e1e1e", fg="#cccccc")
+        scrollbar = tk.Scrollbar(log_frame, command=self.log_text.yview)
+        self.log_text.config(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        self.log_text.pack(side="left", fill="both", expand=True)
+
+        self.log(f"Grafana URL: {GRAFANA_CLOUD_URL or 'N/A'}")
+        self.log(f"API token: {'configured' if GRAFANA_CLOUD_API_TOKEN else 'MISSING'}")
+
+    def log(self, msg):
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        def _append():
+            self.log_text.config(state="normal")
+            self.log_text.insert("end", f"[{timestamp}] {msg}\n")
+            self.log_text.see("end")
+            self.log_text.config(state="disabled")
+        self.root.after(0, _append)
 
     def start_stream(self):
         self.stop_event.clear()
+        self.log("Starting stream...")
         self.reader_thread = threading.Thread(target=read_from_receiver,
-                                              args=(self.label, self.log_label, self.stop_event),
+                                              args=(self.log, self.stop_event),
                                               daemon=True)
         self.reader_thread.start()
         self.start_btn.config(state="disabled")
@@ -159,6 +183,7 @@ class ReceiverApp:
 
     def stop_stream(self):
         self.stop_event.set()
+        self.log("Stopping stream...")
         self.start_btn.config(state="normal")
         self.stop_btn.config(state="disabled")
 
