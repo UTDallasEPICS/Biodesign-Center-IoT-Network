@@ -34,9 +34,7 @@ Every file in the repository (excluding `venv/`, `.git/`, `__pycache__/`, `.ruby
 | Path | Description |
 |------|-------------|
 | `windows-exe/app.py` | Tkinter GUI application. Auto-detects receiver COM port, reads hex from USB serial, decodes packets, and pushes metrics to Grafana Cloud. |
-| `windows-exe/backend.py` | Standalone Grafana push module with test harness. Decodes hex data and sends to Grafana Cloud via Prometheus remote-write. |
 | `windows-exe/hex_parse.py` | `decode_lora()` function. Parses a hex string into a structured dict following the v1 packet protocol. |
-| `windows-exe/main.ipynb` | Jupyter notebook for batch-testing. Loops over sample hex strings, decodes and pushes to Grafana. |
 | `windows-exe/requirements.txt` | Python dependencies: pyinstaller, python-dotenv, pyserial, requests. |
 | `windows-exe/app.spec` | PyInstaller spec file for building `app.exe`. Bundles `hex_parse.py` as a data file. |
 | `windows-exe/exec.spec` | Alternate PyInstaller spec file (older build configuration). |

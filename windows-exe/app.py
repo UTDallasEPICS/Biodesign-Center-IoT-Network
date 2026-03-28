@@ -42,7 +42,10 @@ def grafana_push(data):
     try:
         resp = requests.post(
             GRAFANA_CLOUD_URL,
-            auth=(GRAFANA_CLOUD_USERNAME, GRAFANA_CLOUD_API_TOKEN),
+            headers={
+                "Authorization": f"Bearer {GRAFANA_CLOUD_USERNAME}:{GRAFANA_CLOUD_API_TOKEN}",
+                "Content-Type": "text/plain",
+            },
             data=payload,
         )
         return f"{resp.status_code} {resp.reason}"

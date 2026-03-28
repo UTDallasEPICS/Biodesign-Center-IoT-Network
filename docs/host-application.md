@@ -7,9 +7,7 @@ Windows desktop app that reads decoded LoRa data from the receiver's USB serial 
 ## Files
 
 - `app.py` — Tkinter GUI. Auto-detects receiver COM port, reads hex lines from serial, decodes packets, pushes to Grafana. Start/Stop buttons control the streaming thread.
-- `backend.py` — Standalone Grafana push module. Used for testing outside the GUI. Has a `__main__` block that decodes a hardcoded hex string and pushes it.
 - `hex_parse.py` — `decode_lora(hex_string)` function. Parses the v1 packet protocol from a hex string into a Python dict with `lab_id`, `node_id`, `msg_type`, `channels` (each with `metric` name and `value`).
-- `main.ipynb` — Jupyter notebook for batch-testing. Iterates over a list of sample hex strings, decodes and pushes each to Grafana in a loop.
 - `app.spec` / `exec.spec` — PyInstaller spec files for building the `.exe`.
 - `requirements.txt` — Python dependencies: `pyinstaller`, `python-dotenv`, `pyserial`, `requests`.
 

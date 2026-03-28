@@ -32,8 +32,6 @@ A Tkinter GUI (`app.py`) that:
 3. Decodes packets via `hex_parse.py`.
 4. Pushes each reading to Grafana Cloud as Prometheus remote-write (InfluxDB line protocol over HTTP).
 
-`backend.py` is a standalone/testing version of the Grafana push logic. `main.ipynb` is a notebook for batch-testing with simulated hex data.
-
 ### 4. Grafana Cloud
 
 Receives metrics in InfluxDB line protocol at the Prometheus remote-write endpoint. Credentials are stored in `.env`. Metric name: `biodesign_sensors`, labels: `lab`, `node_id`, `metric`.
