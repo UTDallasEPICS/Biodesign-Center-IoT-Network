@@ -15,3 +15,5 @@ TODO
 - Over-the-air configuration or firmware update strategy (longer term)
 
 - Real grafana push
+
+- Grafana should not recieve door and temp readings when the sensors are down
