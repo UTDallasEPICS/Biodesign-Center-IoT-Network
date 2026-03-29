@@ -21,7 +21,21 @@ def grafana_push(data):
     if "error" in data:
         return "Skipped: decode error"
 
-    payload = "biodesign_test,lab=Lab_1 reading=42.0"
+    lab_id = f"Lab_{data['lab_id']}"
+    node_id = f"Node_{data['node_id']}"
+
+    lines = []
+    for channel in data["channels"]:
+        value = channel["value"]
+        if type(value) == bool:
+            value = 1.0 if value else 0.0
+        else:
+            value = float(value)
+
+        line = f"biodesign_{channel['metric']},lab={lab_id},node_id={node_id} reading={value}"
+        lines.append(line)
+
+    payload = "\n".join(lines)
 
     try:
         resp = requests.post(

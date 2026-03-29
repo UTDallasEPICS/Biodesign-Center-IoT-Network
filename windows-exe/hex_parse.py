@@ -50,22 +50,22 @@ def decode_lora(hex_string):
         if channel_type == 0x01:
             raw_int = parse_int24(raw_val_bytes, is_signed=True)
             channel_data["value"] = raw_int / 100.0
-            channel_data["metric"] = "temperature_celsius"
+            channel_data["metric"] = "temperature"
         elif channel_type == 0x02:
             channel_data["value"] = parse_int24(raw_val_bytes) == 1
-            channel_data["metric"] = "door_open"
+            channel_data["metric"] = "door"
         elif channel_type == 0x03:
             channel_data["value"] = parse_int24(raw_val_bytes, is_signed=False)
-            channel_data["metric"] = "light_adc"
+            channel_data["metric"] = "light"
         elif channel_type == 0x04:
             channel_data["value"] = parse_int24(raw_val_bytes) == 1
-            channel_data["metric"] = "doorbell_rung"
+            channel_data["metric"] = "doorbell"
         elif channel_type == 0x05:
             channel_data["value"] = parse_int24(raw_val_bytes, is_signed=False) == 1
-            channel_data["metric"] = "power_drawing"
+            channel_data["metric"] = "power"
         elif channel_type == 0x06:
             channel_data["value"] = parse_int24(raw_val_bytes, is_signed=False)
-            channel_data["metric"] = "current_milliamps"
+            channel_data["metric"] = "current"
         else:
             channel_data["value"] = parse_int24(raw_val_bytes)
             channel_data["metric"] = "unknown"
