@@ -14,6 +14,8 @@ GRAFANA_CLOUD_URL = os.getenv("GRAFANA_CLOUD_URL", "https://prometheus-prod-66-p
 GRAFANA_CLOUD_USERNAME = os.getenv("GRAFANA_CLOUD_USERNAME", "2988310")
 GRAFANA_CLOUD_API_TOKEN = os.getenv("GRAFANA_CLOUD_API_TOKEN")
 
+node_last_seen = {}  # (lab_id, node_id) -> time.time()
+
 def grafana_push(data):
     if not GRAFANA_CLOUD_API_TOKEN:
         return "No API token configured"
@@ -49,6 +51,41 @@ def grafana_push(data):
         return f"{resp.status_code} {resp.reason}"
     except Exception as e:
         return f"Error: {e}"
+
+def push_status(log_fn):
+    if not GRAFANA_CLOUD_API_TOKEN or not node_last_seen:
+        return
+
+    now = time.time()
+    lines = []
+    for (lab_id, nid), last_seen in node_last_seen.items():
+        elapsed = now - last_seen
+        if elapsed < 30:
+            status = 1.0
+        elif elapsed < 90:
+            status = 0.5
+        else:
+            status = 0.0
+        lines.append(f"biodesign_status,lab=Lab_{lab_id},node_id=Node_{nid} reading={status}")
+
+    payload = "\n".join(lines)
+    try:
+        resp = requests.post(
+            GRAFANA_CLOUD_URL,
+            headers={
+                "Authorization": f"Bearer {GRAFANA_CLOUD_USERNAME}:{GRAFANA_CLOUD_API_TOKEN}",
+                "Content-Type": "text/plain",
+            },
+            data=payload,
+        )
+        log_fn(f"Status push: {resp.status_code} {resp.reason}")
+    except Exception as e:
+        log_fn(f"Status push error: {e}")
+
+def status_loop(log_fn, stop_event):
+    while not stop_event.is_set():
+        push_status(log_fn)
+        stop_event.wait(30)
 
 def find_receiver_port(log_fn):
     """Auto-detect RP2040 receiver on COM port"""
@@ -109,6 +146,7 @@ def read_from_receiver(log_fn, stop_event):
                         log_fn(f"Decoded: {decoded}")
 
                         if "error" not in decoded:
+                            node_last_seen[(decoded['lab_id'], decoded['node_id'])] = time.time()
                             push_result = grafana_push(decoded)
                             packet_count += 1
                             msg_type = decoded.get("msg_type", "unknown")
@@ -181,6 +219,10 @@ class ReceiverApp:
                                               args=(self.log, self.stop_event),
                                               daemon=True)
         self.reader_thread.start()
+        self.status_thread = threading.Thread(target=status_loop,
+                                              args=(self.log, self.stop_event),
+                                              daemon=True)
+        self.status_thread.start()
         self.start_btn.config(state="disabled")
         self.stop_btn.config(state="normal")
 
