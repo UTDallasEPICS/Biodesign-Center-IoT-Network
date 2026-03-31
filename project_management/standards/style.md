@@ -4,7 +4,7 @@
 
 ## Languages
 
-- **Firmware** (`transmitter/`, `receiver/`): CircuitPython (subset of Python 3). No f-strings — use `.format()`.
+- **Firmware** (`fridge-transmitter/`, `receiver/`): CircuitPython (subset of Python 3). No f-strings — use `.format()`.
 - **Host app** (`windows-exe/`): CPython 3. f-strings and type annotations are acceptable.
 
 ---
@@ -26,7 +26,7 @@
 
 ## `packet.py` Duplication
 
-`transmitter/packet.py` and `receiver/packet.py` must remain byte-for-byte identical. The canonical copy lives in `transmitter/`. When editing the protocol, update both files together. The host app's `hex_parse.py` is a separate decoder and must be updated manually — it does not share code with `packet.py`.
+`fridge-transmitter/packet.py` and `receiver/packet.py` must remain byte-for-byte identical. The canonical copy lives in `fridge-transmitter/`. When editing the protocol, update both files together. The host app's `hex_parse.py` is a separate decoder and must be updated manually — it does not share code with `packet.py`.
 
 ---
 
@@ -42,7 +42,7 @@
 ## Formatting
 
 - 4-space indentation everywhere.
-- Module docstrings as block comments at the top of firmware files (see `transmitter/code.py` header style).
+- Module docstrings as block comments at the top of firmware files (see `fridge-transmitter/code.py` header style).
 - Section separators (`# ---`) used to divide hardware init, helpers, and main loop in firmware files.
 - Keep line length reasonable (~100 chars). No hard limit.
 

@@ -4,7 +4,7 @@
 # Usage: run once per microcontroller.
 # Detects OS (Linux/Windows via Git Bash/WSL) and asks:
 #   1. What mount point / drive letter is the board at?
-#   2. Flash receiver or transmitter? (auto-detected if board was previously flashed)
+#   2. Flash receiver or fridge-transmitter? (auto-detected if board was previously flashed)
 
 set -euo pipefail
 
@@ -61,7 +61,7 @@ fi
 # --- Auto-detect role from existing files on board ---
 echo ""
 if [ -f "${MOUNT}sensors.py" ]; then
-    DETECTED="transmitter"
+    DETECTED="fridge-transmitter"
 elif [ -f "${MOUNT}code.py" ]; then
     DETECTED="receiver"
 else
@@ -86,7 +86,7 @@ if [ -z "$DETECTED" ]; then
     read -rp "Enter 1 or 2: " CHOICE
     case "$CHOICE" in
         1) ROLE="receiver"     ;;
-        2) ROLE="transmitter"  ;;
+        2) ROLE="fridge-transmitter"  ;;
         *)
             echo "ERROR: Invalid choice '$CHOICE'. Enter 1 or 2."
             exit 1
@@ -96,7 +96,7 @@ fi
 
 case "$ROLE" in
     receiver)    FILES=("code.py" "config.py" "packet.py") ;;
-    transmitter) FILES=("code.py" "config.py" "packet.py" "sensors.py") ;;
+    fridge-transmitter) FILES=("code.py" "config.py" "packet.py" "sensors.py") ;;
 esac
 
 # --- Flash ---

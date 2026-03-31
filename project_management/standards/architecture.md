@@ -12,10 +12,10 @@ Data flows strictly left to right. No layer communicates backward.
 
 | Layer | Code | Responsibility |
 |-------|------|----------------|
-| Sensor read | `transmitter/sensors.py` | Hardware abstraction only. Returns typed values; no protocol awareness |
-| Event logic | `transmitter/code.py` | Decides when to send; builds channel lists; calls encoder |
-| Packet encoding | `transmitter/packet.py` | Protocol v1 encoding. No hardware or event logic |
-| Radio TX | `transmitter/code.py` (`_send`) | Wraps `rfm9x.send`; no encoding logic |
+| Sensor read | `fridge-transmitter/sensors.py` | Hardware abstraction only. Returns typed values; no protocol awareness |
+| Event logic | `fridge-transmitter/code.py` | Decides when to send; builds channel lists; calls encoder |
+| Packet encoding | `fridge-transmitter/packet.py` | Protocol v1 encoding. No hardware or event logic |
+| Radio TX | `fridge-transmitter/code.py` (`_send`) | Wraps `rfm9x.send`; no encoding logic |
 | Radio RX | `receiver/code.py` | Transparent bridge. No decoding, no filtering |
 | Serial output | `receiver/code.py` | Prints raw hex lines. No interpretation |
 | Decoding | `windows-exe/hex_parse.py` | Parses hex to structured dict. No I/O |
