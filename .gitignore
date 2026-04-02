@@ -1,3 +1,4 @@
 .env
 venv
 windows-exe/dist/*
+CLAUDE.md
