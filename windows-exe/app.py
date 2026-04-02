@@ -96,16 +96,18 @@ def find_receiver_port(log_fn):
         if "RP2040" in port.description or "CircuitPython" in port.description or (port.manufacturer and "Adafruit" in port.manufacturer):
             log_fn(f"  -> Matched as receiver")
             return port.device
-    # Fallback: try common COM ports
-    log_fn("No RP2040 match, trying common COM ports...")
-    for com_port in ["COM3", "COM4", "COM5", "COM6", "COM7", "COM8"]:
+    # Fallback: prefer USB serial devices over Bluetooth
+    log_fn("No RP2040 match, trying USB serial devices first...")
+    usb_ports = [p for p in ports if "Bluetooth" not in p.description]
+    bt_ports = [p for p in ports if "Bluetooth" in p.description]
+    for port in usb_ports + bt_ports:
         try:
-            s = serial.Serial(com_port, timeout=0.1)
+            s = serial.Serial(port.device, timeout=0.1)
             s.close()
-            log_fn(f"  {com_port}: open OK, using as fallback")
-            return com_port
+            log_fn(f"  {port.device}: open OK, using as fallback")
+            return port.device
         except Exception as e:
-            log_fn(f"  {com_port}: {e}")
+            log_fn(f"  {port.device}: {e}")
     return None
 
 def read_from_receiver(log_fn, stop_event):

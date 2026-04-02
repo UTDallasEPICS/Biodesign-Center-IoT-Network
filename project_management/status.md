@@ -15,7 +15,6 @@
 | Description | Severity | Difficulty |
 |---|---|---|
 | Collision detection and retry (CSMA-style backoff, ACK support, sequence numbers) | high | high |
-| update flash.sh to be more of a build step. for example, packet.py should be in one place in the code, and then copied to both microcontrollers. in addition, it should support multiple different transmitters, transmitting different things. | medium | high |
 | Refactor hardware code to have SENSORS be a list of all sensors (like temp, door) and other fields for the rest of the work (node_id should be unique to each transmitter) | medium | medium |
 | Grafana should not receive sensor readings when sensors are down | medium | low |
 | Over-the-air configuration or firmware update strategy | low | high |
