@@ -1,14 +1,17 @@
-# code.py — Transmitter main loop
+# code.py — Transmitter main loop (generic)
 # Biodesign Center IoT Network
 # Hardware: Adafruit Feather RP2040 + RFM95 LoRa 915 MHz (CircuitPython)
 #
 # Behavior:
 #   - Polls sensors every POLL_INTERVAL seconds.
 #   - Sends a DATA packet immediately on:
-#       * door state change (any transition)
-#       * temperature crossing the configured threshold (either direction)
+#       * edge-type channel: any state change
+#       * threshold-type channel: value crossing the configured threshold (either direction)
 #   - Sends a HEARTBEAT packet if no event has been sent in HEARTBEAT_INTERVAL seconds.
 #   - Each sensor defined in config.py is tracked independently.
+#
+# This file is shared across all transmitter types. Sensor-specific behavior
+# comes from READERS and TRIGGER_TYPE in each transmitter's sensors.py.
 
 import time
 import board
@@ -18,7 +21,7 @@ import adafruit_rfm9x
 
 from config import LAB_ID, RADIO_FREQ_MHZ, TX_POWER, HEARTBEAT_INTERVAL, POLL_INTERVAL, SENSORS
 from packet import encode_packet, MSG_DATA, MSG_HEARTBEAT
-from sensors import read_temperature, read_door
+from sensors import READERS, TRIGGER_TYPE
 
 # ---------------------------------------------------------------------------
 # Hardware init
@@ -45,16 +48,14 @@ for s in SENSORS:
 # ---------------------------------------------------------------------------
 # Per-sensor state tracking
 # ---------------------------------------------------------------------------
-# last_sent   : monotonic time of last transmission (0 = never)
-# last_door   : previous door bool, or None before first read
-# last_temp   : previous temperature float, or None before first read
+# last_sent  : monotonic time of last transmission (0 = never)
+# last_value : dict of channel_name -> previous value, or None before first read
 
 sensor_states = {}
 for _s in SENSORS:
     sensor_states[_s["node_id"]] = {
         "last_sent": 0.0,
-        "last_door": None,
-        "last_temp": None,
+        "last_value": {ch: None for ch in _s["channels"]},
     }
 
 # ---------------------------------------------------------------------------
@@ -71,10 +72,10 @@ def _read_channels(sensor_def):
     """Return list of (channel_name, value) for all channels in this sensor def."""
     readings = []
     for ch in sensor_def["channels"]:
-        if ch == "temperature":
-            readings.append(("temperature", read_temperature()))
-        elif ch == "door":
-            readings.append(("door", read_door()))
+        if ch in READERS:
+            readings.append((ch, READERS[ch]()))
+        else:
+            print("WARNING: channel '{}' not found in READERS — skipping".format(ch))
     return readings
 
 # ---------------------------------------------------------------------------
@@ -92,28 +93,30 @@ while True:
 
         trigger_reasons = []
 
-        # --- Edge detection: door state change ---
         for ch_name, ch_val in readings:
-            if ch_name == "door":
-                prev = state["last_door"]
+            prev = state["last_value"][ch_name]
+            ttype = TRIGGER_TYPE.get(ch_name)
+
+            if ttype == "edge":
                 if prev is not None and ch_val != prev:
                     trigger_reasons.append(
-                        "door -> {}".format("open" if ch_val else "closed")
+                        "{} -> {}".format(ch_name, ch_val)
                     )
-                state["last_door"] = ch_val
-
-        # --- Threshold crossing: temperature ---
-        for ch_name, ch_val in readings:
-            if ch_name == "temperature":
-                prev   = state["last_temp"]
-                thresh = thresholds.get("temperature")
+            elif ttype == "threshold":
+                thresh = thresholds.get(ch_name)
                 if thresh is not None and prev is not None:
                     crossed = (prev < thresh <= ch_val) or (prev > thresh >= ch_val)
                     if crossed:
                         trigger_reasons.append(
-                            "temp {:.2f}C crossed {:.2f}C".format(ch_val, thresh)
+                            "{} {:.2f} crossed {:.2f}".format(ch_name, ch_val, thresh)
                         )
-                state["last_temp"] = ch_val
+            else:
+                if ttype is not None:
+                    print("WARNING: unknown trigger type '{}' for channel '{}'".format(
+                        ttype, ch_name
+                    ))
+
+            state["last_value"][ch_name] = ch_val
 
         # --- Send data packet if any trigger fired ---
         if trigger_reasons:

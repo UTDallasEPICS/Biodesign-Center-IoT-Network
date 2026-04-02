@@ -26,28 +26,34 @@
 | [status.txt](../status.txt) | Legacy project status tracker (superseded by project_management/status.md) |
 | [.env](../.env) | Grafana Cloud credentials (URL, username, API token). Not committed. |
 | [.gitignore](../.gitignore) | Ignores `.env` and `venv/` |
-| [flash.sh](../flash.sh) | Interactive shell script to flash receiver or transmitter firmware to a Feather RP2040 |
+| [flash.sh](../flash.sh) | Interactive shell script to flash receiver or transmitter firmware. Auto-discovers transmitter types from `hardware/*-transmitter/` directories |
 
 ---
 
-## `transmitter/` — Transmitter Node Firmware (CircuitPython)
+## `hardware/shared/` — Shared Firmware Files
 
 | File | Description |
 |------|-------------|
-| [transmitter/code.py](../transmitter/code.py) | Main loop. Polls sensors, detects events (door edge, temp threshold crossing), sends DATA or HEARTBEAT packets over LoRa |
-| [transmitter/config.py](../transmitter/config.py) | Per-node configuration: lab ID, node IDs, radio settings, sensor channel definitions, and thresholds. Edit before flashing each board |
-| [transmitter/packet.py](../transmitter/packet.py) | Protocol v1 packet encoder/decoder. Must stay identical to `receiver/packet.py` |
-| [transmitter/sensors.py](../transmitter/sensors.py) | Hardware sensor read functions. Reads TMP36 temperature (analog, pin A0) and door button state (digital, pin D12) |
+| [hardware/shared/packet.py](../hardware/shared/packet.py) | Protocol v1 packet encoder/decoder. Single canonical copy used by all transmitters and the receiver |
+| [hardware/shared/code.py](../hardware/shared/code.py) | Generic transmitter main loop. Imports READERS and TRIGGER_TYPE from each transmitter's sensors.py to drive event detection |
 
 ---
 
-## `receiver/` — Receiver Node Firmware (CircuitPython)
+## `hardware/fridge-transmitter/` — Fridge Transmitter Node Firmware (CircuitPython)
 
 | File | Description |
 |------|-------------|
-| [receiver/code.py](../receiver/code.py) | Main loop. Listens for LoRa packets and prints raw bytes as space-separated hex strings to USB serial |
-| [receiver/config.py](../receiver/config.py) | Receiver configuration: radio frequency and receive timeout |
-| [receiver/packet.py](../receiver/packet.py) | Protocol v1 packet encoder/decoder. Identical copy of `transmitter/packet.py`; present for potential future on-device decoding |
+| [hardware/fridge-transmitter/sensors.py](../hardware/fridge-transmitter/sensors.py) | Hardware sensor read functions (TMP36 temperature on A0, door button on D12). Exports READERS and TRIGGER_TYPE dicts for the generic main loop |
+| [hardware/fridge-transmitter/config.py](../hardware/fridge-transmitter/config.py) | Per-node configuration: lab ID, node IDs, radio settings, sensor channel definitions, and thresholds. Edit before flashing each board |
+
+---
+
+## `hardware/receiver/` — Receiver Node Firmware (CircuitPython)
+
+| File | Description |
+|------|-------------|
+| [hardware/receiver/code.py](../hardware/receiver/code.py) | Main loop. Listens for LoRa packets and prints raw bytes as space-separated hex strings to USB serial |
+| [hardware/receiver/config.py](../hardware/receiver/config.py) | Receiver configuration: radio frequency and receive timeout |
 
 ---
 
@@ -62,4 +68,3 @@
 | [windows-exe/exec.spec](../windows-exe/exec.spec) | Alternate PyInstaller spec file (older build configuration) |
 | [windows-exe/package-lock.json](../windows-exe/package-lock.json) | npm lock file (legacy artifact, not actively used) |
 | [windows-exe/dist/app.exe](../windows-exe/dist/app.exe) | Built Windows executable (output of PyInstaller) |
-

@@ -1,6 +1,6 @@
 # Packet Protocol Context: Biodesign Center IoT Network
 
-Protocol v1. All multi-byte integers are big-endian. Implemented in `transmitter/packet.py` and `receiver/packet.py` (kept identical). `hex_parse.py` in the host app is a parallel implementation used for decoding only — it does not share code with `packet.py`.
+Protocol v1. All multi-byte integers are big-endian. Implemented in `hardware/shared/packet.py` (single canonical copy). `hex_parse.py` in the host app is a parallel implementation used for decoding only — it does not share code with `packet.py`.
 
 ---
 

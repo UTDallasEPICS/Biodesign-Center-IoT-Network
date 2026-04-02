@@ -33,4 +33,4 @@ Same board as transmitter (Feather RP2040 + RFM95). CS/RST/SPI pins identical. N
 
 ## `packet.py`
 
-Included in `receiver/` as an identical copy of `transmitter/packet.py`. Not currently imported by `code.py`. Present for potential future on-device decoding. If the protocol is updated, both copies must be updated together. See `cdocs/packet-protocol.md`.
+The receiver uses `hardware/shared/packet.py` (the single canonical copy). Not currently imported by `code.py`. Present for potential future on-device decoding. See `cdocs/packet-protocol.md`.

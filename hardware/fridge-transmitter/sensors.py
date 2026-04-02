@@ -40,3 +40,18 @@ def read_door():
     Pull.UP means btn.value is True when released (open) and False when pressed (closed).
     """
     return btn.value  # True = not pressed = door open
+
+
+# ---------------------------------------------------------------------------
+# Generic interface for shared/code.py
+# ---------------------------------------------------------------------------
+
+READERS = {
+    "temperature": read_temperature,   # () -> float
+    "door":        read_door,          # () -> bool
+}
+
+TRIGGER_TYPE = {
+    "temperature": "threshold",   # fires on numeric threshold crossing
+    "door":        "edge",        # fires on any state change
+}
