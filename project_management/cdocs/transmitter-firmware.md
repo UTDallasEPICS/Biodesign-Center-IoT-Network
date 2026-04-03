@@ -6,15 +6,15 @@ CircuitPython on Adafruit Feather RP2040 + RFM95 LoRa 915 MHz. Files: `code.py`,
 
 ## Event Logic (`code.py`)
 
-The main loop runs every `POLL_INTERVAL` seconds. Per sensor defined in `SENSORS`:
+The main loop runs every `POLL_INTERVAL` seconds. Per sensor in `SENSORS`:
 
-1. Read all configured channels via `_read_channels(sensor_def)`.
-2. **Door edge detection**: compare current door state to `last_door`; trigger if different.
-3. **Temperature threshold crossing**: if `prev < thresh <= current` or `prev > thresh >= current`, trigger.
+1. Read the channel via `READERS[sensor["channel"]]()`.
+2. **Edge-type** (e.g. door): trigger if value differs from previous.
+3. **Threshold-type** (e.g. temperature): trigger if `prev < thresh <= current` or `prev > thresh >= current`.
 4. If any trigger fired, send a DATA packet with all channel readings; update `last_sent`.
 5. If no trigger has fired within `HEARTBEAT_INTERVAL` seconds since `last_sent`, send a HEARTBEAT.
 
-Each sensor in `SENSORS` has independent state: `last_sent` (monotonic time), `last_door` (bool or None), `last_temp` (float or None). State initialized to `None` before the first read — no edge/threshold triggers fire on the first poll.
+A single `state` dict tracks the whole node: `last_sent` (monotonic time) and `last_value` (dict of channel → previous value, `None` before first read). No edge/threshold triggers fire on the first poll.
 
 ---
 
@@ -43,16 +43,16 @@ Edit before flashing each board. No other files need to change between nodes.
 | Field | Purpose |
 |-------|---------|
 | `LAB_ID` | Lab identifier (1–255, 0 reserved) |
+| `NODE_ID` | Unique ID for this transmitter board (1–255). Edit before flashing each board |
 | `RADIO_FREQ_MHZ` | Must match receiver (915.0) |
 | `TX_POWER` | dBm (5–23). Keep low if USB disconnects during TX |
 | `HEARTBEAT_INTERVAL` | Max seconds of silence before heartbeat (default 30) |
 | `POLL_INTERVAL` | Seconds between sensor reads (default 1) |
-| `SENSORS` | List of sensor defs: `node_id`, `channels`, `thresholds` |
+| `SENSORS` | List of sensor defs: one entry per physical sensor on this board |
 
 Each entry in `SENSORS`:
-- `node_id`: int (1–255), unique per physical enclosure
-- `channels`: list of strings — currently `"temperature"` and `"door"` are implemented
-- `thresholds`: dict of `channel_name → value` for threshold-crossing triggers
+- `channel`: str — currently `"temperature"` and `"door"` are implemented
+- `threshold`: float (optional) — threshold-crossing value for threshold-type channels
 
 ---
 
