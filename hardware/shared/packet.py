@@ -8,9 +8,8 @@
 PROTOCOL_VERSION = 0x01
 
 # msg_type values
-MSG_DATA      = 0x01
-MSG_HEARTBEAT = 0x02
-MSG_ERROR     = 0xFF
+MSG_DATA  = 0x01
+MSG_ERROR = 0xFF
 
 # channel_type codes
 CH_TEMPERATURE  = 0x01
@@ -96,9 +95,6 @@ def encode_packet(lab_id, node_id, msg_type, channels=None):
       encode_packet(1, 1, MSG_DATA, [("temperature", 4.53), ("door", False)])
       -> bytearray b'\\x01\\x01\\x01\\x01\\x02\\x01\\x00\\x01\\xc5\\x02\\x00\\x00\\x00'
 
-    Example — heartbeat:
-      encode_packet(1, 3, MSG_HEARTBEAT)
-      -> bytearray b'\\x01\\x01\\x03\\x02\\x00'
     """
     channels = channels or []
     header = bytearray([

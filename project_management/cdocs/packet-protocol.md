@@ -22,13 +22,14 @@ Each channel block is 4 bytes: `[channel_type:1][value:3]`. Value is 3 big-endia
 
 ## Message Types
 
-| Code | Name      | Meaning                          |
-|------|-----------|----------------------------------|
-| 0x01 | DATA      | Contains N channel readings      |
-| 0x02 | HEARTBEAT | No channels; "I'm alive" signal  |
-| 0xFF | ERROR     | Reserved                         |
+| Code | Name  | Meaning                     |
+|------|-------|-----------------------------|
+| 0x01 | DATA  | Contains N channel readings |
+| 0xFF | ERROR | Reserved                    |
 
-Constants in `packet.py`: `MSG_DATA`, `MSG_HEARTBEAT`, `MSG_ERROR`.
+Constants in `packet.py`: `MSG_DATA`, `MSG_ERROR`.
+
+All transmissions use `MSG_DATA`. Periodic keep-alive sends are also `MSG_DATA` packets carrying current readings — there is no dedicated heartbeat message type.
 
 ---
 

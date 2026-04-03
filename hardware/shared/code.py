@@ -4,10 +4,8 @@
 #
 # Behavior:
 #   - Polls sensors every POLL_INTERVAL seconds.
-#   - Sends a DATA packet immediately on:
-#       * edge-type channel: any state change
-#       * threshold-type channel: value crossing the configured threshold (either direction)
-#   - Sends a HEARTBEAT packet if no event has been sent in HEARTBEAT_INTERVAL seconds.
+#   - Sends a DATA packet immediately when an edge-type channel changes state.
+#   - Sends a DATA packet with current readings if no event has fired within HEARTBEAT_INTERVAL seconds.
 #
 # This file is shared across all transmitter types. Sensor-specific behavior
 # comes from READERS and TRIGGER_TYPE in each transmitter's sensors.py.
@@ -19,7 +17,7 @@ import digitalio
 import adafruit_rfm9x
 
 from config import LAB_ID, NODE_ID, RADIO_FREQ_MHZ, TX_POWER, HEARTBEAT_INTERVAL, POLL_INTERVAL, SENSORS
-from packet import encode_packet, MSG_DATA, MSG_HEARTBEAT
+from packet import encode_packet, MSG_DATA
 from sensors import READERS, TRIGGER_TYPE
 
 # ---------------------------------------------------------------------------
@@ -87,17 +85,8 @@ while True:
         if ttype == "edge":
             if prev is not None and ch_val != prev:
                 trigger_reasons.append("{} -> {}".format(ch, ch_val))
-
-        elif ttype == "threshold":
-            thresh = sensor.get("threshold")
-            if thresh is not None and prev is not None:
-                crossed = (prev < thresh <= ch_val) or (prev > thresh >= ch_val)
-                if crossed:
-                    trigger_reasons.append("{} {:.2f} crossed {:.2f}".format(ch, ch_val, thresh))
-
-        else:
-            if ttype is not None:
-                print("WARNING: unknown trigger type '{}' for channel '{}'".format(ttype, ch))
+        elif ttype is not None:
+            print("WARNING: unknown trigger type '{}' for channel '{}'".format(ttype, ch))
 
         state["last_value"][ch] = ch_val
 
@@ -109,10 +98,10 @@ while True:
         _send(pkt)
         state["last_sent"] = now
 
-    # --- Heartbeat: nothing sent within the interval ---
+    # --- Periodic send: no event fired within the interval ---
     elif now - state["last_sent"] >= HEARTBEAT_INTERVAL:
-        print("[{:.1f}s] HEARTBEAT  node={:#04x}".format(now, NODE_ID))
-        pkt = encode_packet(LAB_ID, NODE_ID, MSG_HEARTBEAT)
+        print("[{:.1f}s] PERIODIC  node={:#04x}".format(now, NODE_ID))
+        pkt = encode_packet(LAB_ID, NODE_ID, MSG_DATA, readings)
         _send(pkt)
         state["last_sent"] = now
 

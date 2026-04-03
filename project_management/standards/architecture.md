@@ -43,6 +43,16 @@ No functions, classes, imports, or logic in either `config.py`. Values must be l
 **F4 — `packet.py` is a single shared file.**
 `hardware/shared/packet.py` is the only copy. All transmitters and the receiver use it.
 
+**F5 — Alert thresholds belong only in Grafana. Sensor calibration thresholds belong only in `sensors.py`.**
+Two distinct threshold concepts must not be confused:
+- **Sensor calibration threshold**: converts a raw analog reading to a bool (e.g. ADC > 1200 → "light is on"). This is hardware-specific and belongs in `sensors.py` as a constant. The main loop never sees it — `read_*()` returns the already-digitized bool.
+- **Alert threshold**: a value at which someone should be notified (e.g. temperature ≥ 10 °C). This belongs exclusively in Grafana. Firmware must not make send decisions based on alert thresholds.
+
+Sensor calibration thresholds enable edge detection on analog sensors (same pattern as digital door sensor). Alert thresholds are analysis and belong downstream.
+
+**F6 — All transmissions use `MSG_DATA` with channel readings.**
+There is no dedicated heartbeat or keep-alive message type. Periodic sends (when no event has fired) use `MSG_DATA` with current readings, ensuring a continuous sensor time series reaches Grafana.
+
 ---
 
 ## Adding a New Channel Type

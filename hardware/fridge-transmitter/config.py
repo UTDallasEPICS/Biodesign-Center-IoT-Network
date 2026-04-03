@@ -29,6 +29,6 @@ POLL_INTERVAL      = 1    # Seconds between sensor reads.
 #                     Edge-type channels (e.g. door) fire on any state change.
 
 SENSORS = [
-    {"channel": "temperature", "threshold": 10.0},   # °C — crossing triggers send
+    {"channel": "temperature"},
     {"channel": "door"},
 ]

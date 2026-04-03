@@ -33,7 +33,7 @@ Each channel becomes one InfluxDB line protocol line:
 biodesign_{metric},lab=Lab_{lab_id},node_id=Node_{node_id} reading={value}
 ```
 
-Bool values are cast to `1.0` / `0.0`. All values sent as `float`. Auth header: `Bearer {username}:{token}`. Content-Type: `text/plain`. Heartbeat packets have no channels so produce no lines and are not pushed.
+Bool values are cast to `1.0` / `0.0`. All values sent as `float`. Auth header: `Bearer {username}:{token}`. Content-Type: `text/plain`. All packets are `DATA` type and carry channels, so every packet produces at least one Grafana line.
 
 ---
 

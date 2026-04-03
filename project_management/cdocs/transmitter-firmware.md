@@ -9,12 +9,13 @@ CircuitPython on Adafruit Feather RP2040 + RFM95 LoRa 915 MHz. Files: `code.py`,
 The main loop runs every `POLL_INTERVAL` seconds. Per sensor in `SENSORS`:
 
 1. Read the channel via `READERS[sensor["channel"]]()`.
-2. **Edge-type** (e.g. door): trigger if value differs from previous.
-3. **Threshold-type** (e.g. temperature): trigger if `prev < thresh <= current` or `prev > thresh >= current`.
-4. If any trigger fired, send a DATA packet with all channel readings; update `last_sent`.
-5. If no trigger has fired within `HEARTBEAT_INTERVAL` seconds since `last_sent`, send a HEARTBEAT.
+2. **Edge-type** (e.g. door): trigger if value differs from previous. No trigger fires on the first poll.
+3. If any trigger fired, send a DATA packet with all channel readings; update `last_sent`.
+4. If no trigger has fired within `HEARTBEAT_INTERVAL` seconds since `last_sent`, send a periodic DATA packet with current readings. This provides a continuous sensor log to the host.
 
-A single `state` dict tracks the whole node: `last_sent` (monotonic time) and `last_value` (dict of channel → previous value, `None` before first read). No edge/threshold triggers fire on the first poll.
+Only `"edge"` is a supported trigger type. Threshold detection is not performed in firmware — it belongs exclusively in Grafana, which has the full time series.
+
+A single `state` dict tracks the whole node: `last_sent` (monotonic time) and `last_value` (dict of channel → previous value, `None` before first read).
 
 ---
 
@@ -52,7 +53,6 @@ Edit before flashing each board. No other files need to change between nodes.
 
 Each entry in `SENSORS`:
 - `channel`: str — currently `"temperature"` and `"door"` are implemented
-- `threshold`: float (optional) — threshold-crossing value for threshold-type channels
 
 ---
 

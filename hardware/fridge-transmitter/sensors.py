@@ -52,6 +52,5 @@ READERS = {
 }
 
 TRIGGER_TYPE = {
-    "temperature": "threshold",   # fires on numeric threshold crossing
-    "door":        "edge",        # fires on any state change
+    "door": "edge",   # fires on any state change
 }

@@ -20,8 +20,6 @@ def decode_lora(hex_string):
     msg_type_raw = data[3]
     if msg_type_raw == 0x01:
         msg_type_str = "data_report"
-    elif msg_type_raw == 0x02:
-        msg_type_str = "heartbeat"
     elif msg_type_raw == 0xFF:
         msg_type_str = "error"
     else:
