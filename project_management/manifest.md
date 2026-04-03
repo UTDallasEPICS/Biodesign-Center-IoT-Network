@@ -27,6 +27,7 @@
 | [.env](../.env) | Grafana Cloud credentials (URL, username, API token). Not committed. |
 | [.gitignore](../.gitignore) | Ignores `.env` and `venv/` |
 | [flash.sh](../flash.sh) | Interactive shell script to flash receiver or transmitter firmware. Auto-discovers transmitter types from `hardware/*-transmitter/` directories |
+| [flash.bat](../flash.bat) | Windows wrapper for `flash.sh`. Finds Git Bash or WSL and delegates to `flash.sh` |
 
 ---
 
