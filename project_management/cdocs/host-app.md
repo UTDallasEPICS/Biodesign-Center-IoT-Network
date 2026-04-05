@@ -14,9 +14,21 @@ Both share a `threading.Event` stop signal. GUI updates (`self.log`) use `root.a
 
 ---
 
+## Port Selection
+
+`scan_ports(log_fn)` returns `(confident_device, candidates)`:
+- If any port matches "RP2040"/"CircuitPython" in description or "Adafruit" in manufacturer, returns that device string and an empty candidates list.
+- Otherwise returns `None` and a list of non-Bluetooth port objects.
+
+`start_stream` (main thread) calls `scan_ports`, then:
+- Confident match → use it.
+- One candidate → use it with a fallback log message.
+- Multiple candidates → show `_choose_port_dialog` (modal `Toplevel` listbox); if cancelled, abort.
+- No candidates → log error, abort.
+
 ## Serial Reading (`read_from_receiver`)
 
-1. Call `find_receiver_port(log_fn)` — scans COM ports for "RP2040", "CircuitPython", or Adafruit manufacturer. Falls back to probing COM3–COM8.
+1. Receives `port` as a parameter (resolved by `start_stream` before thread launch).
 2. Open serial at 115200 baud.
 3. Read lines. Skip empty lines and lines starting with `[` (debug output from CircuitPython).
 4. Strip spaces, uppercase → pass to `decode_lora()`.

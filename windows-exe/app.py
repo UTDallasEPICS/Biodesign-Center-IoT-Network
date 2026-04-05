@@ -87,33 +87,22 @@ def status_loop(log_fn, stop_event):
         push_status(log_fn)
         stop_event.wait(30)
 
-def find_receiver_port(log_fn):
-    """Auto-detect RP2040 receiver on COM port"""
+def scan_ports(log_fn):
+    """Scan COM ports. Returns (confident_device, candidates) where confident_device is a
+    string if an RP2040/CircuitPython/Adafruit device is found, else None, and candidates
+    is a list of non-Bluetooth port objects when no confident match exists."""
     ports = serial.tools.list_ports.comports()
     log_fn(f"Found {len(ports)} COM port(s)")
     for port in ports:
         log_fn(f"  {port.device}: {port.description} (mfr: {port.manufacturer})")
-        if "RP2040" in port.description or "CircuitPython" in port.description or (port.manufacturer and "Adafruit" in port.manufacturer):
-            log_fn(f"  -> Matched as receiver")
-            return port.device
-    # Fallback: prefer USB serial devices over Bluetooth
-    log_fn("No RP2040 match, trying USB serial devices first...")
-    usb_ports = [p for p in ports if "Bluetooth" not in p.description]
-    bt_ports = [p for p in ports if "Bluetooth" in p.description]
-    for port in usb_ports + bt_ports:
-        try:
-            s = serial.Serial(port.device, timeout=0.1)
-            s.close()
-            log_fn(f"  {port.device}: open OK, using as fallback")
-            return port.device
-        except Exception as e:
-            log_fn(f"  {port.device}: {e}")
-    return None
+        if "RP2040" in (port.description or "") or "CircuitPython" in (port.description or "") or "Adafruit" in (port.manufacturer or ""):
+            log_fn(f"  -> {port.device} matched as receiver")
+            return port.device, []
+    candidates = [p for p in ports if "Bluetooth" not in (p.description or "")]
+    return None, candidates
 
-def read_from_receiver(log_fn, stop_event):
+def read_from_receiver(log_fn, stop_event, port):
     """Read LoRa packets from the receiver via USB serial"""
-    log_fn("Searching for receiver...")
-    port = find_receiver_port(log_fn)
 
     if not port:
         log_fn("Receiver not found. Check USB connection.")
@@ -214,11 +203,62 @@ class ReceiverApp:
             self.log_text.config(state="disabled")
         self.root.after(0, _append)
 
+    def _choose_port_dialog(self, candidates):
+        """Modal dialog for choosing a COM port. Returns device string or None."""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Select COM Port")
+        dialog.geometry("480x260")
+        dialog.grab_set()
+
+        tk.Label(dialog, text="Multiple serial ports found.\nSelect the receiver port:").pack(pady=(12, 6), padx=16)
+
+        listbox = tk.Listbox(dialog, font=("Consolas", 9), selectmode="single", height=min(len(candidates), 8))
+        for p in candidates:
+            listbox.insert("end", f"{p.device}  \u2014  {p.description}")
+        listbox.select_set(0)
+        listbox.pack(padx=16, fill="x")
+
+        result = [None]
+
+        def on_ok():
+            sel = listbox.curselection()
+            if sel:
+                result[0] = candidates[sel[0]].device
+            dialog.destroy()
+
+        def on_cancel():
+            dialog.destroy()
+
+        btn_frame = tk.Frame(dialog)
+        btn_frame.pack(pady=10)
+        tk.Button(btn_frame, text="Connect", command=on_ok, bg="#4CAF50", fg="white", width=10).pack(side="left", padx=6)
+        tk.Button(btn_frame, text="Cancel", command=on_cancel, width=10).pack(side="left", padx=6)
+
+        dialog.wait_window()
+        return result[0]
+
     def start_stream(self):
         self.stop_event.clear()
+        self.log("Searching for receiver...")
+
+        confident, candidates = scan_ports(self.log)
+        if confident:
+            port = confident
+        elif len(candidates) == 1:
+            self.log(f"  {candidates[0].device}: no confident match, using as fallback")
+            port = candidates[0].device
+        elif len(candidates) > 1:
+            port = self._choose_port_dialog(candidates)
+            if port is None:
+                self.log("Port selection cancelled.")
+                return
+        else:
+            self.log("Receiver not found. Check USB connection.")
+            return
+
         self.log("Starting stream...")
         self.reader_thread = threading.Thread(target=read_from_receiver,
-                                              args=(self.log, self.stop_event),
+                                              args=(self.log, self.stop_event, port),
                                               daemon=True)
         self.reader_thread.start()
         self.status_thread = threading.Thread(target=status_loop,
