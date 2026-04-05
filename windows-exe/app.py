@@ -5,7 +5,7 @@ from datetime import datetime
 
 import tkinter as tk
 
-from grafana import GRAFANA_CLOUD_URL, GRAFANA_CLOUD_API_TOKEN, grafana_push, status_loop
+from grafana import GRAFANA_CLOUD_URL, GRAFANA_CLOUD_API_TOKEN, grafana_push, push_status
 from serial_reader import scan_ports, read_from_receiver
 
 node_last_seen = {}  # (lab_id, node_id) -> time.time()
@@ -28,6 +28,12 @@ def consume_packets(log_fn, stop_event, packet_queue):
             log_fn(f"Packet #{packet_count}: {msg_type.upper()} | Lab {decoded['lab_id']}, Node {decoded['node_id']} | Push: {push_result}")
         else:
             log_fn(f"Decode error: {decoded['error']}")
+
+
+def status_loop(log_fn, stop_event, node_last_seen):
+    while not stop_event.is_set():
+        push_status(log_fn, node_last_seen)
+        stop_event.wait(30)
 
 
 class ReceiverApp:

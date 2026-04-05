@@ -76,9 +76,3 @@ def push_status(log_fn, node_last_seen):
         log_fn(f"Status push: {resp.status_code} {resp.reason}")
     except Exception as e:
         log_fn(f"Status push error: {e}")
-
-
-def status_loop(log_fn, stop_event, node_last_seen):
-    while not stop_event.is_set():
-        push_status(log_fn, node_last_seen)
-        stop_event.wait(30)
