@@ -4,17 +4,31 @@ Python 3 Tkinter GUI (`windows-exe/app.py`) that reads LoRa data from the receiv
 
 ---
 
-## Threading Model
+## File Layout
 
-Two daemon threads launched on "Start Stream":
-- `reader_thread` → `read_from_receiver(log_fn, stop_event)`: serial read loop
-- `status_thread` → `status_loop(log_fn, stop_event)`: pushes node status every 30 seconds
-
-Both share a `threading.Event` stop signal. GUI updates (`self.log`) use `root.after(0, ...)` to marshal back to the main thread.
+| File | Responsibility |
+|------|---------------|
+| `app.py` | GUI and orchestration. Owns `node_last_seen` and `packet_queue`. Manages thread lifecycle. |
+| `grafana.py` | Grafana Cloud I/O. Credentials, metric formatting, push functions. |
+| `serial_reader.py` | COM port discovery and serial read loop. Puts decoded packets onto a queue. |
+| `hex_parse.py` | Pure decoder. `decode_lora(hex_string)` → structured dict. No I/O. |
 
 ---
 
-## Port Selection
+## Threading Model
+
+Three daemon threads launched on "Start Stream":
+- `reader_thread` → `read_from_receiver(log_fn, stop_event, port, packet_queue)`: serial read loop, puts decoded dicts onto `packet_queue`
+- `consumer_thread` → `consume_packets(log_fn, stop_event, packet_queue)`: drains queue, updates `node_last_seen`, calls `grafana_push`
+- `status_thread` → `status_loop(log_fn, stop_event, node_last_seen)`: pushes node status every 30 seconds
+
+All three share a `threading.Event` stop signal. GUI updates (`self.log`) use `root.after(0, ...)` to marshal back to the main thread.
+
+`node_last_seen: dict[(lab_id, node_id) → float]` and `packet_queue: queue.Queue` are owned by `app.py` and passed as parameters to the threads that need them.
+
+---
+
+## Port Selection (`serial_reader.py`)
 
 `scan_ports(log_fn)` returns `(confident_device, candidates)`:
 - If any port matches "RP2040"/"CircuitPython" in description or "Adafruit" in manufacturer, returns that device string and an empty candidates list.
@@ -26,17 +40,27 @@ Both share a `threading.Event` stop signal. GUI updates (`self.log`) use `root.a
 - Multiple candidates → show `_choose_port_dialog` (modal `Toplevel` listbox); if cancelled, abort.
 - No candidates → log error, abort.
 
-## Serial Reading (`read_from_receiver`)
+## Serial Reading (`serial_reader.py` — `read_from_receiver`)
 
 1. Receives `port` as a parameter (resolved by `start_stream` before thread launch).
 2. Open serial at 115200 baud.
 3. Read lines. Skip empty lines and lines starting with `[` (debug output from CircuitPython).
 4. Strip spaces, uppercase → pass to `decode_lora()`.
-5. On successful decode: update `node_last_seen[(lab_id, node_id)]`, call `grafana_push(decoded)`.
+5. Put decoded dict onto `packet_queue` (regardless of decode error — consumer checks for `"error"` key).
 
 ---
 
-## Grafana Push (`grafana_push`)
+## Packet Consumer (`app.py` — `consume_packets`)
+
+Runs in `consumer_thread`. Blocks on `packet_queue.get(timeout=0.5)` to remain responsive to `stop_event`.
+
+For each decoded packet:
+- If no `"error"` key: update `node_last_seen[(lab_id, node_id)]`, call `grafana_push(decoded)`, log result.
+- If `"error"` key: log decode error.
+
+---
+
+## Grafana Push (`grafana.py` — `grafana_push`)
 
 Credentials loaded from `.env` via `python-dotenv`: `GRAFANA_CLOUD_URL`, `GRAFANA_CLOUD_USERNAME`, `GRAFANA_CLOUD_API_TOKEN`.
 
@@ -49,9 +73,9 @@ Bool values are cast to `1.0` / `0.0`. All values sent as `float`. Auth header: 
 
 ---
 
-## Node Status Tracking (`push_status`)
+## Node Status Tracking (`grafana.py` — `push_status`)
 
-`node_last_seen: dict[(lab_id, node_id) → float]` tracks the last time each node sent a packet. `push_status` runs every 30 seconds and pushes a separate metric:
+`push_status(log_fn, node_last_seen)` runs every 30 seconds via `status_loop` and pushes a separate metric:
 
 ```
 biodesign_status,lab=Lab_{lab_id},node_id=Node_{node_id} reading={status}
@@ -69,4 +93,4 @@ Status values: `1.0` (seen within 30s), `0.5` (30–90s ago), `0.0` (>90s ago). 
 
 ## Building the Executable
 
-`pyinstaller app.spec` from `windows-exe/`. The spec bundles `hex_parse.py` as a data file. `requirements.txt`: `pyinstaller`, `python-dotenv`, `pyserial`, `requests`. Output: `windows-exe/dist/app.exe`.
+`pyinstaller app.spec` from `windows-exe/`. The spec bundles `hex_parse.py`, `grafana.py`, and `serial_reader.py` as data files. `requirements.txt`: `pyinstaller`, `python-dotenv`, `pyserial`, `requests`. Output: `windows-exe/dist/app.exe`.

@@ -7,7 +7,7 @@
 Data flows strictly left to right. No layer communicates backward.
 
 ```
-[Sensors]  →  [Transmitter Node]  →  [LoRa 915 MHz]  →  [Receiver Node]  →  [USB Serial]  →  [Host App]  →  [Grafana Cloud]
+[Sensors]  →nto1  [Transmitter Node]  →  [LoRa 915 MHz, nto1]  →  [Receiver Node]  →  [USB Serial, 1to1]  →  [Host App]  →nto1  [Grafana Cloud]
 ```
 
 | Layer | Code | Responsibility |
@@ -19,7 +19,9 @@ Data flows strictly left to right. No layer communicates backward.
 | Radio RX | `hardware/receiver/code.py` | Transparent bridge. No decoding, no filtering |
 | Serial output | `hardware/receiver/code.py` | Prints raw hex lines. No interpretation |
 | Decoding | `windows-exe/hex_parse.py` | Parses hex to structured dict. No I/O |
-| Grafana push | `windows-exe/app.py` | Formats and posts metrics. No decoding logic |
+| Grafana push | `windows-exe/grafana.py` | Formats and posts metrics. No decoding logic |
+| Serial I/O | `windows-exe/serial_reader.py` | Port discovery and serial read loop. Puts decoded packets onto a queue. No Grafana logic |
+| Orchestration | `windows-exe/app.py` | GUI, thread lifecycle, packet consumer. Owns `node_last_seen` and `packet_queue`. No I/O logic |
 
 ---
 
@@ -29,9 +31,13 @@ Data flows strictly left to right. No layer communicates backward.
 
 **`packet.py`** — protocol implementation. No CircuitPython hardware imports. Single canonical copy in `hardware/shared/`.
 
-**`hex_parse.py`** — decoding only. No network I/O, no GUI, no serial. Called from `app.py` as a pure function.
+**`hex_parse.py`** — decoding only. No network I/O, no GUI, no serial. Called from `serial_reader.py` as a pure function.
 
-**`app.py`** — orchestration: GUI, serial thread, status thread, Grafana push. No decoding logic inline — delegates to `decode_lora()`.
+**`grafana.py`** — Grafana Cloud I/O only. Formats and posts metrics and status. No serial, no GUI, no decoding logic.
+
+**`serial_reader.py`** — serial I/O only. Discovers COM ports and reads the receiver. Decodes packets via `decode_lora()` and puts results onto a `queue.Queue`. No Grafana imports.
+
+**`app.py`** — orchestration only. Owns `node_last_seen` and `packet_queue`. Manages thread lifecycle (reader, consumer, status). `consume_packets` drains the queue, updates `node_last_seen`, and calls `grafana_push`. No inline I/O logic.
 
 ---
 

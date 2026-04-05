@@ -1,164 +1,34 @@
-import tkinter as tk
+import queue
 import threading
 import time
 from datetime import datetime
-import serial
-import serial.tools.list_ports
-import os
-import requests
-from dotenv import load_dotenv
-from hex_parse import decode_lora
 
-load_dotenv()
-GRAFANA_CLOUD_URL = os.getenv("GRAFANA_CLOUD_URL", "https://prometheus-prod-66-prod-us-east-3.grafana.net/api/v1/push/influx/write")
-GRAFANA_CLOUD_USERNAME = os.getenv("GRAFANA_CLOUD_USERNAME", "2988310")
-GRAFANA_CLOUD_API_TOKEN = os.getenv("GRAFANA_CLOUD_API_TOKEN")
+import tkinter as tk
+
+from grafana import GRAFANA_CLOUD_URL, GRAFANA_CLOUD_API_TOKEN, grafana_push, status_loop
+from serial_reader import scan_ports, read_from_receiver
 
 node_last_seen = {}  # (lab_id, node_id) -> time.time()
 
-def grafana_push(data):
-    if not GRAFANA_CLOUD_API_TOKEN:
-        return "No API token configured"
 
-    if "error" in data:
-        return "Skipped: decode error"
-
-    lab_id = f"Lab_{data['lab_id']}"
-    node_id = f"Node_{data['node_id']}"
-
-    lines = []
-    for channel in data["channels"]:
-        value = channel["value"]
-        if type(value) == bool:
-            value = 1.0 if value else 0.0
-        else:
-            value = float(value)
-
-        line = f"biodesign_{channel['metric']},lab={lab_id},node_id={node_id} reading={value}"
-        lines.append(line)
-
-    payload = "\n".join(lines)
-
-    try:
-        resp = requests.post(
-            GRAFANA_CLOUD_URL,
-            headers={
-                "Authorization": f"Bearer {GRAFANA_CLOUD_USERNAME}:{GRAFANA_CLOUD_API_TOKEN}",
-                "Content-Type": "text/plain",
-            },
-            data=payload,
-        )
-        return f"{resp.status_code} {resp.reason}"
-    except Exception as e:
-        return f"Error: {e}"
-
-def push_status(log_fn):
-    if not GRAFANA_CLOUD_API_TOKEN or not node_last_seen:
-        return
-
-    now = time.time()
-    lines = []
-    for (lab_id, nid), last_seen in node_last_seen.items():
-        elapsed = now - last_seen
-        if elapsed < 30:
-            status = 1.0
-        elif elapsed < 90:
-            status = 0.5
-        else:
-            status = 0.0
-        lines.append(f"biodesign_status,lab=Lab_{lab_id},node_id=Node_{nid} reading={status}")
-
-    payload = "\n".join(lines)
-    try:
-        resp = requests.post(
-            GRAFANA_CLOUD_URL,
-            headers={
-                "Authorization": f"Bearer {GRAFANA_CLOUD_USERNAME}:{GRAFANA_CLOUD_API_TOKEN}",
-                "Content-Type": "text/plain",
-            },
-            data=payload,
-        )
-        log_fn(f"Status push: {resp.status_code} {resp.reason}")
-    except Exception as e:
-        log_fn(f"Status push error: {e}")
-
-def status_loop(log_fn, stop_event):
+def consume_packets(log_fn, stop_event, packet_queue):
+    """Drain packet_queue, update node_last_seen, and push to Grafana."""
+    packet_count = 0
     while not stop_event.is_set():
-        push_status(log_fn)
-        stop_event.wait(30)
+        try:
+            decoded = packet_queue.get(timeout=0.5)
+        except queue.Empty:
+            continue
 
-def scan_ports(log_fn):
-    """Scan COM ports. Returns (confident_device, candidates) where confident_device is a
-    string if an RP2040/CircuitPython/Adafruit device is found, else None, and candidates
-    is a list of non-Bluetooth port objects when no confident match exists."""
-    ports = serial.tools.list_ports.comports()
-    log_fn(f"Found {len(ports)} COM port(s)")
-    for port in ports:
-        log_fn(f"  {port.device}: {port.description} (mfr: {port.manufacturer})")
-        if "RP2040" in (port.description or "") or "CircuitPython" in (port.description or "") or "Adafruit" in (port.manufacturer or ""):
-            log_fn(f"  -> {port.device} matched as receiver")
-            return port.device, []
-    candidates = [p for p in ports if "Bluetooth" not in (p.description or "")]
-    return None, candidates
+        if "error" not in decoded:
+            node_last_seen[(decoded['lab_id'], decoded['node_id'])] = time.time()
+            push_result = grafana_push(decoded)
+            packet_count += 1
+            msg_type = decoded.get("msg_type", "unknown")
+            log_fn(f"Packet #{packet_count}: {msg_type.upper()} | Lab {decoded['lab_id']}, Node {decoded['node_id']} | Push: {push_result}")
+        else:
+            log_fn(f"Decode error: {decoded['error']}")
 
-def read_from_receiver(log_fn, stop_event, port):
-    """Read LoRa packets from the receiver via USB serial"""
-
-    if not port:
-        log_fn("Receiver not found. Check USB connection.")
-        return
-
-    ser = None
-    try:
-        ser = serial.Serial(port, 115200, timeout=1)
-        log_fn(f"Connected to {port}")
-
-        packet_count = 0
-
-        while not stop_event.is_set() and ser.is_open:
-            try:
-                if ser.in_waiting:
-                    raw = ser.readline()
-                    line = raw.decode('utf-8', errors='ignore').strip()
-
-                    if not line:
-                        continue
-
-                    if line.startswith("["):
-                        log_fn(f"Serial: {line}")
-                        continue
-
-                    log_fn(f"Raw hex: {line}")
-
-                    hex_str = line.replace(" ", "").upper()
-
-                    try:
-                        decoded = decode_lora(hex_str)
-                        log_fn(f"Decoded: {decoded}")
-
-                        if "error" not in decoded:
-                            node_last_seen[(decoded['lab_id'], decoded['node_id'])] = time.time()
-                            push_result = grafana_push(decoded)
-                            packet_count += 1
-                            msg_type = decoded.get("msg_type", "unknown")
-                            log_fn(f"Packet #{packet_count}: {msg_type.upper()} | Lab {decoded['lab_id']}, Node {decoded['node_id']} | Push: {push_result}")
-                        else:
-                            log_fn(f"Decode error: {decoded['error']}")
-                    except Exception as e:
-                        log_fn(f"Decode exception: {e}")
-                else:
-                    time.sleep(0.1)
-
-            except Exception as e:
-                log_fn(f"Read error: {e}")
-                time.sleep(1)
-
-    except serial.SerialException as e:
-        log_fn(f"Connection failed: {e}")
-    finally:
-        if ser:
-            ser.close()
-        log_fn("Stopped")
 
 class ReceiverApp:
     def __init__(self, root):
@@ -167,6 +37,9 @@ class ReceiverApp:
         self.root.geometry("600x400")
         self.stop_event = threading.Event()
         self.reader_thread = None
+        self.consumer_thread = None
+        self.status_thread = None
+        self.packet_queue = queue.Queue()
 
         title = tk.Label(root, text="LoRa Receiver Data Stream", font=("Arial", 12, "bold"))
         title.pack(pady=(10, 5))
@@ -257,13 +130,23 @@ class ReceiverApp:
             return
 
         self.log("Starting stream...")
-        self.reader_thread = threading.Thread(target=read_from_receiver,
-                                              args=(self.log, self.stop_event, port),
-                                              daemon=True)
+        self.reader_thread = threading.Thread(
+            target=read_from_receiver,
+            args=(self.log, self.stop_event, port, self.packet_queue),
+            daemon=True,
+        )
+        self.consumer_thread = threading.Thread(
+            target=consume_packets,
+            args=(self.log, self.stop_event, self.packet_queue),
+            daemon=True,
+        )
+        self.status_thread = threading.Thread(
+            target=status_loop,
+            args=(self.log, self.stop_event, node_last_seen),
+            daemon=True,
+        )
         self.reader_thread.start()
-        self.status_thread = threading.Thread(target=status_loop,
-                                              args=(self.log, self.stop_event),
-                                              daemon=True)
+        self.consumer_thread.start()
         self.status_thread.start()
         self.start_btn.config(state="disabled")
         self.stop_btn.config(state="normal")
@@ -273,6 +156,7 @@ class ReceiverApp:
         self.log("Stopping stream...")
         self.start_btn.config(state="normal")
         self.stop_btn.config(state="disabled")
+
 
 root = tk.Tk()
 app = ReceiverApp(root)

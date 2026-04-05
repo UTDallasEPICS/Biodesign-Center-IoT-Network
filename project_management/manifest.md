@@ -62,7 +62,9 @@
 
 | File | Description |
 |------|-------------|
-| [windows-exe/app.py](../windows-exe/app.py) | Tkinter GUI application. Auto-detects receiver COM port, reads hex from USB serial, decodes packets, pushes metrics to Grafana Cloud, tracks node status |
+| [windows-exe/app.py](../windows-exe/app.py) | Tkinter GUI and orchestration. Manages thread lifecycle (reader, consumer, status), owns `node_last_seen` and `packet_queue`, consumes decoded packets and calls grafana_push |
+| [windows-exe/grafana.py](../windows-exe/grafana.py) | Grafana Cloud I/O. Loads credentials from `.env`, formats InfluxDB line protocol, pushes data and node status metrics |
+| [windows-exe/serial_reader.py](../windows-exe/serial_reader.py) | Serial port discovery (`scan_ports`) and receiver read loop (`read_from_receiver`). Puts decoded packets onto a queue. No Grafana logic |
 | [windows-exe/hex_parse.py](../windows-exe/hex_parse.py) | `decode_lora()` function. Parses a hex string into a structured dict following the v1 packet protocol |
 | [windows-exe/requirements.txt](../windows-exe/requirements.txt) | Python dependencies: pyinstaller, python-dotenv, pyserial, requests |
 | [windows-exe/app.spec](../windows-exe/app.spec) | PyInstaller spec file for building `app.exe`. Bundles `hex_parse.py` as a data file |

@@ -5,7 +5,7 @@ a = Analysis(
     ['app.py'],
     pathex=[],
     binaries=[],
-    datas=[('hex_parse.py', '.')],
+    datas=[('hex_parse.py', '.'), ('grafana.py', '.'), ('serial_reader.py', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
