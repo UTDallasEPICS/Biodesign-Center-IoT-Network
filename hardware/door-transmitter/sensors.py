@@ -24,7 +24,7 @@ LIGHT_THRESHOLD = 32768
 
 def read_light_event():
     """Returns True when light level exceeds LIGHT_THRESHOLD, False otherwise."""
-    return light_sensor.value > LIGHT_THRESHOLD
+    return light_sensor.value < LIGHT_THRESHOLD
 
 
 # ---------------------------------------------------------------------------
