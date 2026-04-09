@@ -49,6 +49,15 @@
 
 ---
 
+## `hardware/door-transmitter/` — Door Transmitter Node Firmware (CircuitPython)
+
+| File | Description |
+|------|-------------|
+| [hardware/door-transmitter/sensors.py](../hardware/door-transmitter/sensors.py) | Light event sensor on A0. Returns bool (True=light detected) by comparing raw ADC to `LIGHT_THRESHOLD`. Exports READERS and TRIGGER_TYPE for the generic main loop |
+| [hardware/door-transmitter/config.py](../hardware/door-transmitter/config.py) | Per-node configuration: lab 2, node 2, light_event channel |
+
+---
+
 ## `hardware/receiver/` — Receiver Node Firmware (CircuitPython)
 
 | File | Description |
