@@ -6,7 +6,7 @@
 #
 #   read_temperature() -> float   degrees Celsius
 #   read_door()        -> bool    False=closed, True=open
-
+import time
 import board
 import analogio
 from digitalio import DigitalInOut, Direction, Pull
@@ -36,7 +36,8 @@ btn.pull = Pull.UP
 
 def read_temperature():
     """Returns current temperature in degrees Celsius (float)."""
-    
+    print(f"Temperature: {ds18.temperature:0.3f}C")
+    time.sleep(1.0)
     return ds18.temperature
 
 
