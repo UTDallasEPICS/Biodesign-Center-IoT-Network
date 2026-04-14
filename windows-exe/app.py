@@ -4,9 +4,11 @@ import time
 from datetime import datetime
 
 import tkinter as tk
+from tkinter import ttk
 
 from grafana import GRAFANA_CLOUD_URL, GRAFANA_CLOUD_API_TOKEN, grafana_push, push_status
 from serial_reader import scan_ports, read_from_receiver
+from flasher_view import FlasherView
 
 node_last_seen = {}  # (lab_id, node_id) -> time.time()
 
@@ -36,21 +38,25 @@ def status_loop(log_fn, stop_event, node_last_seen):
         stop_event.wait(30)
 
 
-class ReceiverApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Biodesign LoRa Receiver -> Grafana")
-        self.root.geometry("600x400")
+# ======================================================================
+# Receiver Stream tab
+# ======================================================================
+
+class ReceiverView(tk.Frame):
+    """Receiver data stream view — the original app UI as a tab."""
+
+    def __init__(self, parent):
+        super().__init__(parent)
         self.stop_event = threading.Event()
         self.reader_thread = None
         self.consumer_thread = None
         self.status_thread = None
         self.packet_queue = queue.Queue()
 
-        title = tk.Label(root, text="LoRa Receiver Data Stream", font=("Arial", 12, "bold"))
+        title = tk.Label(self, text="LoRa Receiver Data Stream", font=("Arial", 12, "bold"))
         title.pack(pady=(10, 5))
 
-        button_frame = tk.Frame(root)
+        button_frame = tk.Frame(self)
         button_frame.pack(pady=5)
 
         self.start_btn = tk.Button(button_frame, text="Start Stream", command=self.start_stream,
@@ -61,7 +67,7 @@ class ReceiverApp:
                                   bg="#f44336", fg="white", font=("Arial", 10, "bold"), width=18, padx=10, state="disabled")
         self.stop_btn.pack(side="left", padx=5)
 
-        log_frame = tk.Frame(root)
+        log_frame = tk.Frame(self)
         log_frame.pack(fill="both", expand=True, padx=10, pady=(5, 10))
 
         self.log_text = tk.Text(log_frame, font=("Consolas", 9), state="disabled", wrap="word", bg="#1e1e1e", fg="#cccccc")
@@ -80,11 +86,12 @@ class ReceiverApp:
             self.log_text.insert("end", f"[{timestamp}] {msg}\n")
             self.log_text.see("end")
             self.log_text.config(state="disabled")
-        self.root.after(0, _append)
+        self.winfo_toplevel().after(0, _append)
 
     def _choose_port_dialog(self, candidates):
         """Modal dialog for choosing a COM port. Returns device string or None."""
-        dialog = tk.Toplevel(self.root)
+        root = self.winfo_toplevel()
+        dialog = tk.Toplevel(root)
         dialog.title("Select COM Port")
         dialog.geometry("480x260")
         dialog.grab_set()
@@ -164,6 +171,21 @@ class ReceiverApp:
         self.stop_btn.config(state="disabled")
 
 
+# ======================================================================
+# Main application — tab bar
+# ======================================================================
+
 root = tk.Tk()
-app = ReceiverApp(root)
+root.title("Biodesign LoRa Receiver -> Grafana")
+root.geometry("700x500")
+
+notebook = ttk.Notebook(root)
+notebook.pack(fill="both", expand=True)
+
+receiver_tab = ReceiverView(notebook)
+flasher_tab = FlasherView(notebook)
+
+notebook.add(receiver_tab, text="Receiver Stream")
+notebook.add(flasher_tab, text="Sensor Flasher")
+
 root.mainloop()

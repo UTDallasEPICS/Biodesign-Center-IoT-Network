@@ -91,6 +91,58 @@ Status values: `1.0` (seen within 30s), `0.5` (30–90s ago), `0.0` (>90s ago). 
 
 ---
 
+## Tab Layout
+
+The app uses a `ttk.Notebook` with two tabs. Adding a new tab requires one import and one `notebook.add()` call in `app.py`.
+
+| Tab | Class | File | Purpose |
+|-----|-------|------|---------|
+| Receiver Stream | `ReceiverView` | `app.py` | Original stream UI (serial reading, Grafana push, node status) |
+| Sensor Flasher | `FlasherView` | `flasher_view.py` | Configure and flash transmitter firmware |
+
+---
+
+## Sensor Flasher (`flasher_view.py`, `sensor_defs.py`, `firmware_gen.py`)
+
+A GUI for configuring transmitter nodes and writing firmware to a mounted CircuitPython board.
+
+### Workflow
+
+1. Optionally load an existing transmitter type from the dropdown (parses its `config.py` to pre-populate the form).
+2. Set Lab ID and Node ID.
+3. Add sensors via the dropdown. Each sensor type shows channel-specific fields (pin, threshold, unit, pull direction, etc.).
+4. Choose a transmitter name for the repo directory (`hardware/<name>-transmitter/`).
+5. Enter the board's drive letter.
+6. Click **Save to Repo**, **Flash to Board**, or **Save + Flash**.
+
+### Supported Channels
+
+| Channel | Fields | Trigger |
+|---------|--------|---------|
+| `temperature` | Analog pin, Unit (C/F — warning shown if F selected since Grafana expects Celsius) | None (heartbeat only) |
+| `door` | Digital pin, Pull direction (UP/DOWN), Closed-when-pressed (bool) | Edge |
+| `light_event` | Analog pin, Light threshold (0–100% of ADC range) | Edge |
+| `current_draw` | Analog pin, Current threshold (0–100% of ADC range) | Edge |
+
+### Code Generation (`firmware_gen.py`)
+
+- `generate_config(lab_id, node_id, sensors)` → assignment-only `config.py` with hardcoded radio/timing defaults (915.0 MHz, 5 dBm, 30s heartbeat, 1s poll).
+- `generate_sensors(sensors)` → complete `sensors.py` assembled from per-channel templates defined in `sensor_defs.py`. Deduplicates imports, combines pin setups, constants, read functions, and `READERS`/`TRIGGER_TYPE` dicts.
+
+### Channel Type Registry (`sensor_defs.py`)
+
+Each channel entry defines: label, pin type, trigger type, UI field definitions (with type, options, defaults), and code template strings (imports, pin setup, constants, read function body). `pct_to_adc()` converts 0–100% thresholds to 16-bit ADC values. `build_read_fn_body()` handles dynamic code variants (C/F conversion, pull direction/closed-state combinations for door).
+
+### Flash to Board (`firmware_gen.py — flash_to_board`)
+
+Writes 4 files to the mounted drive: generated `config.py` and `sensors.py`, plus `code.py` and `packet.py` copied from `hardware/shared/`.
+
+### Save to Repo (`firmware_gen.py — save_to_repo`)
+
+Creates or overwrites `hardware/<name>-transmitter/config.py` and `sensors.py`. Creates the directory if it does not exist.
+
+---
+
 ## Building the Executable
 
 `pyinstaller app.spec` from `windows-exe/`. The spec bundles `hex_parse.py`, `grafana.py`, and `serial_reader.py` as data files. `requirements.txt`: `pyinstaller`, `python-dotenv`, `pyserial`, `requests`. Output: `windows-exe/dist/app.exe`.

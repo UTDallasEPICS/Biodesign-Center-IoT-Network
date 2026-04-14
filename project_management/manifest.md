@@ -71,7 +71,10 @@
 
 | File | Description |
 |------|-------------|
-| [windows-exe/app.py](../windows-exe/app.py) | Tkinter GUI and orchestration. Manages thread lifecycle (reader, consumer, status), owns `node_last_seen` and `packet_queue`, consumes decoded packets and calls grafana_push |
+| [windows-exe/app.py](../windows-exe/app.py) | Top-level Tkinter app with `ttk.Notebook` tab bar. Tab 1: `ReceiverView` (stream). Tab 2: `FlasherView` (sensor flasher). Owns `node_last_seen`, `packet_queue`, and thread lifecycle |
+| [windows-exe/flasher_view.py](../windows-exe/flasher_view.py) | Sensor Flasher tab UI. Configure transmitter nodes (lab/node ID, sensors with per-channel parameters), load existing transmitter types, save to repo, and flash to a mounted CircuitPython board |
+| [windows-exe/sensor_defs.py](../windows-exe/sensor_defs.py) | Channel type registry. Each entry defines UI fields, code templates (imports, pin setup, constants, read function), and trigger type for generating transmitter firmware |
+| [windows-exe/firmware_gen.py](../windows-exe/firmware_gen.py) | Code generation and flash I/O. `generate_config()` and `generate_sensors()` produce firmware file content. `flash_to_board()` copies to a mounted board. `save_to_repo()` writes to `hardware/<name>/` |
 | [windows-exe/grafana.py](../windows-exe/grafana.py) | Grafana Cloud I/O. Loads credentials from `.env`, formats InfluxDB line protocol, pushes data and node status metrics |
 | [windows-exe/serial_reader.py](../windows-exe/serial_reader.py) | Serial port discovery (`scan_ports`) and receiver read loop (`read_from_receiver`). Puts decoded packets onto a queue. No Grafana logic |
 | [windows-exe/hex_parse.py](../windows-exe/hex_parse.py) | `decode_lora()` function. Parses a hex string into a structured dict following the v1 packet protocol |
