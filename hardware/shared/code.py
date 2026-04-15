@@ -11,12 +11,15 @@
 # comes from READERS and TRIGGER_TYPE in each transmitter's sensors.py.
 
 import time
+import random
 import board
 import busio
 import digitalio
 import adafruit_rfm9x
 
-from config import LAB_ID, NODE_ID, RADIO_FREQ_MHZ, TX_POWER, HEARTBEAT_INTERVAL, POLL_INTERVAL, SENSORS
+from config import (LAB_ID, NODE_ID, RADIO_FREQ_MHZ, TX_POWER,
+                    HEARTBEAT_INTERVAL, POLL_INTERVAL, SENSORS,
+                    RECEIVER_NODE, ACK_RETRIES, ACK_WAIT, CSMA_DELAY_MAX)
 from packet import encode_packet, MSG_DATA
 from sensors import READERS, TRIGGER_TYPE
 
@@ -34,8 +37,15 @@ print("Initializing RFM95...")
 rfm9x = adafruit_rfm9x.RFM9x(spi, CS, RESET, RADIO_FREQ_MHZ)
 rfm9x.tx_power = TX_POWER
 rfm9x.enable_crc = True
+rfm9x.node = NODE_ID
+rfm9x.destination = RECEIVER_NODE
+rfm9x.ack_retries = ACK_RETRIES
+rfm9x.ack_wait = ACK_WAIT
 print("Radio ready  freq={} MHz  lab={:#04x}  node={:#04x}  tx_power={} dBm".format(
     RADIO_FREQ_MHZ, LAB_ID, NODE_ID, TX_POWER
+))
+print("  ACK enabled  dest={:#04x}  retries={}  ack_wait={}s  csma_max={}s".format(
+    RECEIVER_NODE, ACK_RETRIES, ACK_WAIT, CSMA_DELAY_MAX
 ))
 for s in SENSORS:
     print("  channel={}  threshold={}".format(s["channel"], s.get("threshold", "n/a")))
@@ -56,9 +66,14 @@ state = {
 # ---------------------------------------------------------------------------
 
 def _send(pkt):
+    time.sleep(random.uniform(0, CSMA_DELAY_MAX))
     led.value = True
-    rfm9x.send(bytes(pkt))
+    ack_ok = rfm9x.send_with_ack(bytes(pkt))
     led.value = False
+    if ack_ok:
+        print("  TX ok (ACK received)")
+    else:
+        print("  TX FAIL (no ACK after {} retries)".format(ACK_RETRIES))
 
 # ---------------------------------------------------------------------------
 # Main loop

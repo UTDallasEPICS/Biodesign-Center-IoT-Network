@@ -21,9 +21,9 @@ A single `state` dict tracks the whole node: `last_sent` (monotonic time) and `l
 
 ## Hardware (`code.py`)
 
-Radio CS/RST: `board.RFM_CS`, `board.RFM_RST`. SPI: `board.SCK/MOSI/MISO`. LED: `board.LED` (blinks on transmit). `rfm9x.enable_crc = True`. TX power set from config.
+Radio CS/RST: `board.RFM_CS`, `board.RFM_RST`. SPI: `board.SCK/MOSI/MISO`. LED: `board.LED` (blinks on transmit). `rfm9x.enable_crc = True`. TX power set from config. Addressed mode enabled: `rfm9x.node = NODE_ID`, `rfm9x.destination = RECEIVER_NODE`. ACK configured via `rfm9x.ack_retries` and `rfm9x.ack_wait`.
 
-`_send(pkt)`: sets LED True, calls `rfm9x.send(bytes(pkt))`, sets LED False.
+`_send(pkt)`: waits a random jitter (0 to `CSMA_DELAY_MAX` seconds) to reduce collision probability, sets LED True, calls `rfm9x.send_with_ack(bytes(pkt))`, sets LED False. Logs whether ACK was received or all retries were exhausted.
 
 ---
 
@@ -49,6 +49,10 @@ Edit before flashing each board. No other files need to change between nodes.
 | `TX_POWER` | dBm (5–23). Keep low if USB disconnects during TX |
 | `HEARTBEAT_INTERVAL` | Max seconds of silence before heartbeat (default 30) |
 | `POLL_INTERVAL` | Seconds between sensor reads (default 1) |
+| `RECEIVER_NODE` | Radio address of the receiver node (default 0x01). Must match receiver config |
+| `ACK_RETRIES` | Max retry attempts if no ACK received (default 3) |
+| `ACK_WAIT` | Seconds to wait for ACK per attempt (default 0.5) |
+| `CSMA_DELAY_MAX` | Max random jitter in seconds before first transmit (default 0.1) |
 | `SENSORS` | List of sensor defs: one entry per physical sensor on this board |
 
 Each entry in `SENSORS`:

@@ -11,6 +11,10 @@ NODE_ID = 0x01   # Unique ID matching the physical label on this enclosure (1-25
 # --- Radio ---
 RADIO_FREQ_MHZ = 915.0  # Hz. Must match receiver exactly.
 TX_POWER       = 5      # dBm (5-23). Keep low if USB disconnects during TX.
+RECEIVER_NODE  = 0x01   # Radio address of the receiver node (for ACK routing).
+ACK_RETRIES    = 3      # Times to retry if no ACK received.
+ACK_WAIT       = 0.5    # Seconds to wait for ACK per attempt.
+CSMA_DELAY_MAX = 0.1    # Max random jitter (seconds) before first transmit.
 
 # --- Timing ---
 HEARTBEAT_INTERVAL = 30   # Seconds. Heartbeat sent if no event in this window.

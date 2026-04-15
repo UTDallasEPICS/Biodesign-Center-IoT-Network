@@ -11,7 +11,7 @@ import busio
 import digitalio
 import adafruit_rfm9x
 
-from config import RADIO_FREQ_MHZ, RECEIVE_TIMEOUT
+from config import RADIO_FREQ_MHZ, RECEIVE_TIMEOUT, RECEIVER_NODE
 
 # ---------------------------------------------------------------------------
 # Hardware init
@@ -26,7 +26,8 @@ spi   = busio.SPI(board.SCK, MOSI=board.MOSI, MISO=board.MISO)
 print("Initializing RFM95...")
 rfm9x = adafruit_rfm9x.RFM9x(spi, CS, RESET, RADIO_FREQ_MHZ)
 rfm9x.enable_crc = True
-print("Receiver ready  freq={} MHz".format(RADIO_FREQ_MHZ))
+rfm9x.node = RECEIVER_NODE
+print("Receiver ready  freq={} MHz  node={:#04x}  ACK=on".format(RADIO_FREQ_MHZ, RECEIVER_NODE))
 print("-" * 72)
 
 # ---------------------------------------------------------------------------
@@ -34,7 +35,7 @@ print("-" * 72)
 # ---------------------------------------------------------------------------
 
 while True:
-    raw = rfm9x.receive(timeout=RECEIVE_TIMEOUT)
+    raw = rfm9x.receive(timeout=RECEIVE_TIMEOUT, with_ack=True)
     if raw is None:
         continue
 
