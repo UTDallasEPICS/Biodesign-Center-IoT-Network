@@ -71,7 +71,7 @@
 
 | File | Description |
 |------|-------------|
-| [windows-exe/app.py](../windows-exe/app.py) | Tkinter GUI and orchestration. Manages thread lifecycle (reader, consumer, status), owns `node_last_seen` and `packet_queue`, consumes decoded packets and calls grafana_push |
+| [windows-exe/app.py](../windows-exe/app.py) | Tabbed Tkinter GUI and orchestration. Two tabs: Data Stream (log, start/stop) and Receiver Pairing (discover transmitters, toggle listen on/off). Manages thread lifecycle, owns `node_last_seen`, `discovered_nodes`, `listened_nodes`, and `packet_queue`. Only pushes to Grafana for listened transmitters |
 | [windows-exe/grafana.py](../windows-exe/grafana.py) | Grafana Cloud I/O. Loads credentials from `.env`, formats InfluxDB line protocol, pushes data and node status metrics |
 | [windows-exe/serial_reader.py](../windows-exe/serial_reader.py) | Serial port discovery (`scan_ports`) and receiver read loop (`read_from_receiver`). Puts decoded packets onto a queue. No Grafana logic |
 | [windows-exe/hex_parse.py](../windows-exe/hex_parse.py) | `decode_lora()` function. Parses a hex string into a structured dict following the v1 packet protocol |

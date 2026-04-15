@@ -8,7 +8,7 @@ Python 3 Tkinter GUI (`windows-exe/app.py`) that reads LoRa data from the receiv
 
 | File | Responsibility |
 |------|---------------|
-| `app.py` | GUI and orchestration. Owns `node_last_seen` and `packet_queue`. Manages thread lifecycle. |
+| `app.py` | Tabbed GUI and orchestration. Owns `node_last_seen`, `discovered_nodes`, `listened_nodes`, and `packet_queue`. Manages thread lifecycle. Contains `DataStreamTab` (log view), `ReceiverPairingTab` (transmitter discovery and listen toggles), and `ReceiverApp` (orchestration). |
 | `grafana.py` | Grafana Cloud I/O. Credentials, metric formatting, push functions. |
 | `serial_reader.py` | COM port discovery and serial read loop. Puts decoded packets onto a queue. |
 | `hex_parse.py` | Pure decoder. `decode_lora(hex_string)` → structured dict. No I/O. |
@@ -55,8 +55,22 @@ All three share a `threading.Event` stop signal. GUI updates (`self.log`) use `r
 Runs in `consumer_thread`. Blocks on `packet_queue.get(timeout=0.5)` to remain responsive to `stop_event`.
 
 For each decoded packet:
-- If no `"error"` key: update `node_last_seen[(lab_id, node_id)]`, call `grafana_push(decoded)`, log result.
+- Always: update `discovered_nodes[(lab_id, node_id)]` with current time and log the packet.
+- If `(lab_id, node_id)` is in `listened_nodes`: update `node_last_seen`, call `grafana_push(decoded)`, log push result.
+- If not in `listened_nodes`: log as ignored (not paired).
 - If `"error"` key: log decode error.
+
+---
+
+## Receiver Pairing (`app.py` — `ReceiverPairingTab`)
+
+Tabbed view that displays all transmitters discovered via incoming packets. Each unique `(lab_id, node_id)` pair gets a row showing the transmitter identity, last-seen time, and a listen toggle button (default: off).
+
+Module-level state:
+- `discovered_nodes: dict[(lab_id, node_id) → {"last_seen": float}]` — all transmitters seen since app start.
+- `listened_nodes: set[(lab_id, node_id)]` — transmitters whose packets should be pushed to Grafana.
+
+The view refreshes every 2 seconds via `root.after()`. New transmitters are added as rows automatically. Toggling a transmitter on adds it to `listened_nodes`; toggling off removes it. Neither set persists across app restarts.
 
 ---
 

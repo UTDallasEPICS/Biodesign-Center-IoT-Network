@@ -21,7 +21,7 @@ Data flows strictly left to right. No layer communicates backward.
 | Decoding | `windows-exe/hex_parse.py` | Parses hex to structured dict. No I/O |
 | Grafana push | `windows-exe/grafana.py` | Formats and posts metrics. No decoding logic |
 | Serial I/O | `windows-exe/serial_reader.py` | Port discovery and serial read loop. Puts decoded packets onto a queue. No Grafana logic |
-| Orchestration | `windows-exe/app.py` | GUI, thread lifecycle, packet consumer. Owns `node_last_seen` and `packet_queue`. No I/O logic |
+| Orchestration | `windows-exe/app.py` | Tabbed GUI, thread lifecycle, packet consumer, receiver pairing. Owns `node_last_seen`, `discovered_nodes`, `listened_nodes`, and `packet_queue`. No I/O logic |
 
 ---
 
@@ -37,7 +37,7 @@ Data flows strictly left to right. No layer communicates backward.
 
 **`serial_reader.py`** — serial I/O only. Discovers COM ports and reads the receiver. Decodes packets via `decode_lora()` and puts results onto a `queue.Queue`. No Grafana imports.
 
-**`app.py`** — orchestration only. Owns `node_last_seen` and `packet_queue`. Manages thread lifecycle (reader, consumer, status). `consume_packets` drains the queue, updates `node_last_seen`, and calls `grafana_push`. No inline I/O logic.
+**`app.py`** — orchestration only. Owns `node_last_seen`, `discovered_nodes`, `listened_nodes`, and `packet_queue`. Manages thread lifecycle (reader, consumer, status). `consume_packets` drains the queue, tracks discovered transmitters, and calls `grafana_push` only for listened transmitters. Tabbed UI: `DataStreamTab` (log view), `ReceiverPairingTab` (transmitter discovery and listen toggles). No inline I/O logic.
 
 ---
 
