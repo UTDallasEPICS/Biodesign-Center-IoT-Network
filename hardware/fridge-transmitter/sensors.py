@@ -36,7 +36,7 @@ btn.pull = Pull.UP
 
 def read_temperature():
     """Returns current temperature in degrees Celsius (float)."""
-    print(f"Temperature: {ds18.temperature:0.3f}C")
+    
     time.sleep(1.0)
     return ds18.temperature
 
