@@ -5,17 +5,19 @@
 
 import board
 import analogio
+import adafruit_tsl2591
 
 # ---------------------------------------------------------------------------
 # Pin setup
 # ---------------------------------------------------------------------------
 
-# Light sensor on A0
-light_sensor = analogio.AnalogIn(board.A0)
+# Light sensor on I2C (SCL and SDA)
+i2c = board.I2C()
+sensor = adafruit_tsl2591.TSL2591(i2c)
 
-# Threshold for light detection (raw 16-bit ADC count, 0–65535).
+# Threshold for light detection (raw 32-bit count, 0–2147483647).
 # Set above half-scale as a starting point; tune per deployment.
-LIGHT_THRESHOLD = 32768
+LIGHT_THRESHOLD = 1073741823
 
 
 # ---------------------------------------------------------------------------
@@ -24,7 +26,7 @@ LIGHT_THRESHOLD = 32768
 
 def read_light_event():
     """Returns True when light level exceeds LIGHT_THRESHOLD, False otherwise."""
-    return light_sensor.value < LIGHT_THRESHOLD
+    return sensor.visible > LIGHT_THRESHOLD
 
 
 # ---------------------------------------------------------------------------
