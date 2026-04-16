@@ -19,7 +19,7 @@ from adafruit_ds18x20 import DS18X20
 
 # Temperature: DS18B20 on D13
 # Initialize one-wire bus on board pin D13.
-ow_bus = OneWireBus(board.D13)
+ow_bus = OneWireBus(board.D11)
 
 # Scan for sensors and grab the first one found.
 ds18 = DS18X20(ow_bus, ow_bus.scan()[0])
