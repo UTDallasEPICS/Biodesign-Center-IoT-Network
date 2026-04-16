@@ -15,8 +15,12 @@ from digitalio import DigitalInOut, Direction, Pull
 # Pin setup
 # ---------------------------------------------------------------------------
 
-# Temperature: TMP36 on A0
-tmp36 = analogio.AnalogIn(board.A0)
+# Temperature: DS18B20 on D13
+# Initialize one-wire bus on board pin D13.
+ow_bus = OneWireBus(board.D11)
+
+# Scan for sensors and grab the first one found.
+ds18 = DS18X20(ow_bus, ow_bus.scan()[0])
 
 # Door: push button on D12 (pressed = closed, released = open)
 btn = DigitalInOut(board.D12)
