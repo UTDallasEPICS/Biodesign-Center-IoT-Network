@@ -25,8 +25,8 @@ ow_bus = OneWireBus(board.D11)
 ds18 = DS18X20(ow_bus, ow_bus.scan()[0])
 
 # Door: push button on D12 (pressed = closed, released = open)
-door_sensor = digitalio.DigitalInOut(board.D12)
-door_sensor.switch_to_input(pull=digitalio.Pull.UP)
+door_sensor = DigitalInOut(board.D12)
+door_sensor.switch_to_input(pull=Pull.UP)
 
 
 # ---------------------------------------------------------------------------
@@ -45,6 +45,7 @@ def read_door():
 
     Pull.UP means door_sensor.value is True when released (open) and False when pressed (closed).
     """
+    
     return door_sensor.value  # True = not pressed = door open
 
 
