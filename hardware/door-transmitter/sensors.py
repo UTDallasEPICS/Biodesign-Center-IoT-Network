@@ -17,7 +17,7 @@ sensor = adafruit_tsl2591.TSL2591(i2c)
 
 # Threshold for light detection (raw 32-bit count, 0–2147483647).
 # Set above half-scale as a starting point; tune per deployment.
-LIGHT_THRESHOLD = 1073741823
+LIGHT_THRESHOLD = 15000
 
 
 # ---------------------------------------------------------------------------
@@ -26,6 +26,7 @@ LIGHT_THRESHOLD = 1073741823
 
 def read_light_event():
     """Returns True when light level exceeds LIGHT_THRESHOLD, False otherwise."""
+    
     return sensor.visible > LIGHT_THRESHOLD
 
 
