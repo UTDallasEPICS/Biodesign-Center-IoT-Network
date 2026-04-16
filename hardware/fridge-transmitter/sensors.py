@@ -6,17 +6,16 @@
 #
 #   read_temperature() -> float   degrees Celsius
 #   read_door()        -> bool    False=closed, True=open
-import time
 import board
-import analogio
 from digitalio import DigitalInOut, Direction, Pull
+from adafruit_onewire.bus import OneWireBus
+from adafruit_ds18x20 import DS18X20
 
 # ---------------------------------------------------------------------------
 # Pin setup
 # ---------------------------------------------------------------------------
 
-# Temperature: DS18B20 on D13
-# Initialize one-wire bus on board pin D13.
+# Temperature: DS18B20 on D11
 ow_bus = OneWireBus(board.D11)
 
 # Scan for sensors and grab the first one found.
@@ -34,8 +33,6 @@ btn.pull = Pull.UP
 
 def read_temperature():
     """Returns current temperature in degrees Celsius (float)."""
-    print(f"Temperature: {ds18.temperature:0.3f}C")
-    time.sleep(1.0)
     return ds18.temperature
 
 

@@ -14,6 +14,7 @@
 
 | Description | Severity | Difficulty |
 |---|---|---|
+| Write all sensor data and listening status to tmp folder windows | high | medium |
 | Flash display on exe | high | medium |
 | Display of all transmitters | high | medium |
 | Remove all PERIODIC_SEND_INTERVAL references | low | low |
