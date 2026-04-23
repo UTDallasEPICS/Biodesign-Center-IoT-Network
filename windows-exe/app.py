@@ -8,6 +8,7 @@ from tkinter import ttk
 
 from grafana import GRAFANA_CLOUD_URL, GRAFANA_CLOUD_API_TOKEN, grafana_push, push_status
 from serial_reader import scan_ports, read_from_receiver
+from flash_tab import FlashTab
 
 node_last_seen = {}  # (lab_id, node_id) -> time.time()
 discovered_nodes = {}  # (lab_id, node_id) -> {"last_seen": float}
@@ -196,9 +197,11 @@ class ReceiverApp:
 
         self.stream_tab = DataStreamTab(self.notebook, self)
         self.pairing_tab = ReceiverPairingTab(self.notebook, self)
+        self.flash_tab = FlashTab(self.notebook, self)
 
         self.notebook.add(self.stream_tab.frame, text="  Data Stream  ")
         self.notebook.add(self.pairing_tab.frame, text="  Node Pairing  ")
+        self.notebook.add(self.flash_tab.frame, text="  Flash Device  ")
 
         self.log(f"Grafana URL: {GRAFANA_CLOUD_URL or 'N/A'}")
         self.log(f"API token: {'configured' if GRAFANA_CLOUD_API_TOKEN else 'MISSING'}")

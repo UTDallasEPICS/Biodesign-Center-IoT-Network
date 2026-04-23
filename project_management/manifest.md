@@ -8,11 +8,11 @@
 |------|-------------|
 | [project_management/manifest.md](manifest.md) | This file — full project file listing with descriptions |
 | [project_management/status.md](status.md) | Active work, open items, and closed items tracking |
-| [project_management/cdoc.md](cdoc.md) | Template instructions for generating context documents |
 | [project_management/cdocs/packet-protocol.md](cdocs/packet-protocol.md) | v1 binary packet format, channel types, encode/decode logic |
 | [project_management/cdocs/transmitter-firmware.md](cdocs/transmitter-firmware.md) | Event logic, sensor polling, heartbeat, per-node configuration |
 | [project_management/cdocs/receiver-firmware.md](cdocs/receiver-firmware.md) | Transparent bridge behavior, serial output format, radio config |
 | [project_management/cdocs/host-app.md](cdocs/host-app.md) | Tkinter GUI, serial reading, Grafana push, node status tracking |
+| [project_management/cdocs/flash-tool.md](cdocs/flash-tool.md) | Flash Device tab, sensor template format, library management, shell flash scripts |
 | [project_management/standards/style.md](standards/style.md) | Coding conventions: Python/CircuitPython naming, formatting, config patterns |
 | [project_management/standards/architecture.md](standards/architecture.md) | System architecture conventions: data flow layers, sync rules, forbidden patterns |
 
@@ -28,6 +28,20 @@
 | [.gitignore](../.gitignore) | Ignores `.env` and `venv/` |
 | [flash.sh](../flash.sh) | Interactive shell script to flash receiver or transmitter firmware. Auto-discovers transmitter types from `hardware/*-transmitter/` directories |
 | [flash.bat](../flash.bat) | Windows wrapper for `flash.sh`. Finds Git Bash or WSL and delegates to `flash.sh` |
+
+---
+
+## `hardware/sensor_templates/` — Sensor Template Files
+
+| File | Description |
+|------|-------------|
+| [hardware/sensor_templates/temperature_ds18b20.py](../hardware/sensor_templates/temperature_ds18b20.py) | DS18B20 OneWire temperature sensor. Param: pin |
+| [hardware/sensor_templates/door_button.py](../hardware/sensor_templates/door_button.py) | Digital push-button door sensor (Pull.UP). Param: pin |
+| [hardware/sensor_templates/light_event_tsl2591.py](../hardware/sensor_templates/light_event_tsl2591.py) | TSL2591 I2C light event sensor. Param: threshold 0-100% |
+
+---
+
+## `hardware/libraries/` — CircuitPython Libraries
 
 ---
 
@@ -71,7 +85,8 @@
 
 | File | Description |
 |------|-------------|
-| [windows-exe/app.py](../windows-exe/app.py) | Tabbed Tkinter GUI and orchestration. Two tabs: Data Stream (log, start/stop) and Receiver Pairing (discover transmitters, toggle listen on/off). Manages thread lifecycle, owns `node_last_seen`, `discovered_nodes`, `listened_nodes`, and `packet_queue`. Only pushes to Grafana for listened transmitters |
+| [windows-exe/app.py](../windows-exe/app.py) | Tabbed Tkinter GUI and orchestration. Three tabs: Data Stream (log, start/stop), Receiver Pairing (discover transmitters, toggle listen), and Flash Device. Manages thread lifecycle, owns `node_last_seen`, `discovered_nodes`, `listened_nodes`, and `packet_queue`. Only pushes to Grafana for listened transmitters |
+| [windows-exe/flash_tab.py](../windows-exe/flash_tab.py) | Flash Device tab: template parser, code composer (generates `sensors.py` and `config.py` from sensor templates), drive scanner, and flash logic. Copies firmware + libraries to CircuitPython boards |
 | [windows-exe/grafana.py](../windows-exe/grafana.py) | Grafana Cloud I/O. Loads credentials from `.env`, formats InfluxDB line protocol, pushes data and node status metrics |
 | [windows-exe/serial_reader.py](../windows-exe/serial_reader.py) | Serial port discovery (`scan_ports`) and receiver read loop (`read_from_receiver`). Puts decoded packets onto a queue. No Grafana logic |
 | [windows-exe/hex_parse.py](../windows-exe/hex_parse.py) | `decode_lora()` function. Parses a hex string into a structured dict following the v1 packet protocol |

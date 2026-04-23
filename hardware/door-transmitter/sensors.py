@@ -15,7 +15,7 @@ import adafruit_tsl2591
 i2c = board.I2C()
 sensor = adafruit_tsl2591.TSL2591(i2c)
 
-# Threshold for light detection (raw 32-bit count, 0–2147483647).
+# Threshold for light detection (16-bit ADC).
 # Set above half-scale as a starting point; tune per deployment.
 LIGHT_THRESHOLD = 15000
 
