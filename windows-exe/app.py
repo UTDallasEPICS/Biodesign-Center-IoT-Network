@@ -63,6 +63,22 @@ class DataStreamTab:
                                   bg="#f44336", fg="white", font=("Arial", 10, "bold"), width=18, padx=10, state="disabled")
         self.stop_btn.pack(side="left", padx=5)
 
+        broadcast_frame = tk.Frame(self.frame, relief="groove", bd=1, bg="#f0f4ff")
+        broadcast_frame.pack(fill="x", padx=10, pady=(0, 5))
+
+        self.broadcast_label = tk.Label(
+            broadcast_frame,
+            text="",
+            font=("Arial", 9),
+            bg="#f0f4ff",
+            fg="#333333",
+            anchor="w",
+            padx=8,
+            pady=4,
+        )
+        self.broadcast_label.pack(fill="x")
+        self._refresh_broadcast_panel()
+
         log_frame = tk.Frame(self.frame)
         log_frame.pack(fill="both", expand=True, padx=10, pady=(5, 10))
 
@@ -71,6 +87,16 @@ class DataStreamTab:
         self.log_text.config(yscrollcommand=scrollbar.set)
         scrollbar.pack(side="right", fill="y")
         self.log_text.pack(side="left", fill="both", expand=True)
+
+    def _refresh_broadcast_panel(self):
+        if listened_nodes:
+            names = "  |  ".join(f"Lab {lab}, Node {node}" for lab, node in sorted(listened_nodes))
+            text = f"Broadcasting nodes: {names}"
+            self.broadcast_label.config(text=text, fg="#333333", font=("Arial", 9))
+        else:
+            text = "Broadcasting nodes: None \u2014 View Node Pairing to choose nodes to broadcast"
+            self.broadcast_label.config(text=text, fg="#cc0000", font=("Arial", 9, "bold"))
+        self.app.root.after(2000, self._refresh_broadcast_panel)
 
     def log(self, msg):
         timestamp = datetime.now().strftime("%H:%M:%S")
