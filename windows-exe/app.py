@@ -9,10 +9,41 @@ from tkinter import ttk
 from grafana import GRAFANA_CLOUD_URL, GRAFANA_CLOUD_API_TOKEN, grafana_push, push_status
 from serial_reader import scan_ports, read_from_receiver
 from flash_tab import FlashTab
+from storage import load_state, save_state
 
 node_last_seen = {}  # (lab_id, node_id) -> time.time()
-discovered_nodes = {}  # (lab_id, node_id) -> {"last_seen": float}
+discovered_nodes = {}  # (lab_id, node_id) -> {"last_seen": float|None}
 listened_nodes = set()  # set of (lab_id, node_id)
+remembered_nodes = {}   # "lab_id,node_id" -> {"last_seen": float|None, "name": str|None}
+flashed_nodes = []      # list of flash record dicts
+
+
+def _load_initial_state():
+    state = load_state()
+    for pair in state["listened_nodes"]:
+        listened_nodes.add(tuple(pair))
+    for key_str, info in state["remembered_nodes"].items():
+        lab_s, node_s = key_str.split(",")
+        key = (int(lab_s), int(node_s))
+        discovered_nodes[key] = {"last_seen": info.get("last_seen")}
+        remembered_nodes[key_str] = info
+    flashed_nodes.extend(state["flashed_nodes"])
+
+
+_load_initial_state()
+
+
+def _save():
+    save_state(listened_nodes, remembered_nodes, flashed_nodes)
+
+
+def node_display_name(lab_id, node_id):
+    """Return 'Name (Lab X/Node Y)' if named, else 'Lab X, Node Y'."""
+    info = remembered_nodes.get(f"{lab_id},{node_id}", {})
+    name = info.get("name")
+    if name:
+        return f"{name} (Lab {lab_id}/Node {node_id})"
+    return f"Lab {lab_id}, Node {node_id}"
 
 
 def consume_packets(log_fn, stop_event, packet_queue):
@@ -26,7 +57,22 @@ def consume_packets(log_fn, stop_event, packet_queue):
 
         if "error" not in decoded:
             key = (decoded['lab_id'], decoded['node_id'])
+            is_new = key not in discovered_nodes or discovered_nodes[key]["last_seen"] is None
             discovered_nodes[key] = {"last_seen": time.time()}
+
+            key_str = f"{key[0]},{key[1]}"
+            if key_str not in remembered_nodes:
+                # Carry over any name from a prior flash record for this node
+                name = None
+                for record in reversed(flashed_nodes):
+                    if record["lab_id"] == key[0] and record["node_id"] == key[1]:
+                        name = record.get("name")
+                        break
+                remembered_nodes[key_str] = {"last_seen": time.time(), "name": name}
+                _save()
+            elif is_new:
+                remembered_nodes[key_str]["last_seen"] = time.time()
+                _save()
 
             msg_type = decoded.get("msg_type", "unknown")
 
@@ -44,6 +90,13 @@ def consume_packets(log_fn, stop_event, packet_queue):
 def status_loop(log_fn, stop_event, node_last_seen):
     while not stop_event.is_set():
         push_status(log_fn, node_last_seen)
+        # Persist current last_seen timestamps for all known nodes
+        for key, ts in list(discovered_nodes.items()):
+            if ts["last_seen"] is not None:
+                key_str = f"{key[0]},{key[1]}"
+                if key_str in remembered_nodes:
+                    remembered_nodes[key_str]["last_seen"] = ts["last_seen"]
+        _save()
         stop_event.wait(30)
 
 
@@ -90,7 +143,7 @@ class DataStreamTab:
 
     def _refresh_broadcast_panel(self):
         if listened_nodes:
-            names = "  |  ".join(f"Lab {lab}, Node {node}" for lab, node in sorted(listened_nodes))
+            names = "  |  ".join(node_display_name(lab, node) for lab, node in sorted(listened_nodes))
             text = f"Broadcasting nodes: {names}"
             self.broadcast_label.config(text=text, fg="#333333", font=("Arial", 9))
         else:
@@ -139,8 +192,9 @@ class ReceiverPairingTab:
         # Column headers
         header_frame = tk.Frame(self.scroll_frame, bg="#e0e0e0")
         header_frame.pack(fill="x", padx=2, pady=(2, 4))
-        tk.Label(header_frame, text="Transmitter", font=("Arial", 9, "bold"), bg="#e0e0e0", width=20, anchor="w").pack(side="left", padx=(8, 0))
-        tk.Label(header_frame, text="Last Seen", font=("Arial", 9, "bold"), bg="#e0e0e0", width=16, anchor="w").pack(side="left")
+        tk.Label(header_frame, text="Transmitter", font=("Arial", 9, "bold"), bg="#e0e0e0", width=18, anchor="w").pack(side="left", padx=(8, 0))
+        tk.Label(header_frame, text="Name", font=("Arial", 9, "bold"), bg="#e0e0e0", width=14, anchor="w").pack(side="left")
+        tk.Label(header_frame, text="Last Seen", font=("Arial", 9, "bold"), bg="#e0e0e0", width=14, anchor="w").pack(side="left")
         tk.Label(header_frame, text="Status", font=("Arial", 9, "bold"), bg="#e0e0e0", width=12, anchor="w").pack(side="left")
 
         self._refresh()
@@ -162,21 +216,33 @@ class ReceiverPairingTab:
         row = tk.Frame(self.scroll_frame, bg="#ffffff", relief="groove", bd=1)
         row.pack(fill="x", padx=2, pady=2)
 
-        name_label = tk.Label(row, text=f"Lab {lab_id} / Node {node_id}", font=("Consolas", 10),
-                              bg="#ffffff", width=20, anchor="w")
-        name_label.pack(side="left", padx=(8, 0))
+        id_label = tk.Label(row, text=f"Lab {lab_id} / Node {node_id}", font=("Consolas", 10),
+                            bg="#ffffff", width=18, anchor="w")
+        id_label.pack(side="left", padx=(8, 0))
 
-        seen_label = tk.Label(row, text="--", font=("Consolas", 9), bg="#ffffff", width=16, anchor="w")
+        stored_name = remembered_nodes.get(f"{lab_id},{node_id}", {}).get("name") or ""
+        name_label = tk.Label(row, text=stored_name, font=("Arial", 9, "italic"),
+                              bg="#ffffff", fg="#555555", width=14, anchor="w")
+        name_label.pack(side="left")
+
+        seen_label = tk.Label(row, text="--", font=("Consolas", 9), bg="#ffffff", width=14, anchor="w")
         seen_label.pack(side="left")
 
-        btn_var = tk.BooleanVar(value=False)
-        toggle_btn = tk.Button(row, text="Off", bg="#cccccc", fg="#333333",
-                               font=("Arial", 9, "bold"), width=8,
-                               command=lambda k=key, v=btn_var: self._toggle(k, v))
+        is_listened = key in listened_nodes
+        btn_var = tk.BooleanVar(value=is_listened)
+        toggle_btn = tk.Button(
+            row,
+            text="Listening" if is_listened else "Off",
+            bg="#4CAF50" if is_listened else "#cccccc",
+            fg="white" if is_listened else "#333333",
+            font=("Arial", 9, "bold"), width=8,
+            command=lambda k=key, v=btn_var: self._toggle(k, v),
+        )
         toggle_btn.pack(side="left", padx=4, pady=4)
 
         self.node_rows[key] = {
             "row": row,
+            "name_label": name_label,
             "seen_label": seen_label,
             "toggle_btn": toggle_btn,
             "btn_var": btn_var,
@@ -184,14 +250,22 @@ class ReceiverPairingTab:
 
     def _update_row(self, key, info, now):
         widgets = self.node_rows[key]
-        elapsed = now - info["last_seen"]
+        last_seen = info.get("last_seen")
 
-        if elapsed < 10:
-            seen_text = "just now"
-        elif elapsed < 60:
-            seen_text = f"{int(elapsed)}s ago"
+        if last_seen is None:
+            seen_text = "never seen"
         else:
-            seen_text = f"{int(elapsed // 60)}m {int(elapsed % 60)}s ago"
+            elapsed = now - last_seen
+            if elapsed < 10:
+                seen_text = "just now"
+            elif elapsed < 60:
+                seen_text = f"{int(elapsed)}s ago"
+            elif elapsed < 3600:
+                seen_text = f"{int(elapsed // 60)}m ago"
+            elif elapsed < 86400:
+                seen_text = f"{int(elapsed // 3600)}h ago"
+            else:
+                seen_text = f"{int(elapsed // 86400)}d ago"
 
         widgets["seen_label"].config(text=seen_text)
 
@@ -205,6 +279,7 @@ class ReceiverPairingTab:
             listened_nodes.add(key)
             btn_var.set(True)
             widgets["toggle_btn"].config(text="Listening", bg="#4CAF50", fg="white")
+        _save()
 
 
 class ReceiverApp:
@@ -315,6 +390,43 @@ class ReceiverApp:
         self.log("Stopping stream...")
         self.stream_tab.start_btn.config(state="normal")
         self.stream_tab.stop_btn.config(state="disabled")
+
+    def record_flash(self, lab_id, node_id, name, sensors):
+        """Record a successful transmitter flash. Called from the GUI thread."""
+        record = {
+            "lab_id": lab_id,
+            "node_id": node_id,
+            "name": name,
+            "flashed_at": datetime.now().isoformat(timespec="seconds"),
+            "sensors": [
+                {
+                    "channel": s["template"]["channel"],
+                    "template_name": s["template"]["name"],
+                    "params": s["param_values"],
+                }
+                for s in sensors
+            ],
+        }
+        flashed_nodes.append(record)
+
+        key_str = f"{lab_id},{node_id}"
+        if key_str in remembered_nodes:
+            if name:
+                remembered_nodes[key_str]["name"] = name
+        else:
+            remembered_nodes[key_str] = {"last_seen": None, "name": name}
+
+        _save()
+
+        # Refresh name label in pairing tab if that row already exists
+        key = (lab_id, node_id)
+        if name and key in self.pairing_tab.node_rows:
+            self.pairing_tab.node_rows[key]["name_label"].config(text=name)
+
+        self.log(
+            f"Flash recorded: Lab {lab_id}, Node {node_id}"
+            + (f" — named '{name}'" if name else " (unnamed)")
+        )
 
 
 root = tk.Tk()

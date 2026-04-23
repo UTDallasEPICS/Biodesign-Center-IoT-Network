@@ -305,8 +305,13 @@ def _copy_libraries(mount, lib_names, log_fn):
             log_fn("  WARNING: library '{}' not found in hardware/libraries/ — skipped".format(lib_name))
 
 
-def flash_transmitter(mount, lab_id, node_id, sensors, log_fn):
-    """Generate and copy all transmitter files to the board."""
+def flash_transmitter(mount, lab_id, node_id, sensors, log_fn, on_success=None):
+    """Generate and copy all transmitter files to the board.
+
+    on_success is called with no arguments after a successful flash (from the
+    calling thread). The caller is responsible for marshalling to the GUI thread
+    if needed.
+    """
     try:
         config_code = compose_config_py(lab_id, node_id, sensors)
         sensors_code = compose_sensors_py(sensors)
@@ -338,6 +343,8 @@ def flash_transmitter(mount, lab_id, node_id, sensors, log_fn):
 
         log_fn("")
         log_fn("Flash complete.")
+        if on_success:
+            on_success()
     except Exception as e:
         log_fn("ERROR: {}".format(e))
 
@@ -675,6 +682,49 @@ class FlashTab:
             text_w.pack(fill="both", expand=True)
 
     # -------------------------------------------------------------------
+    # Post-flash name dialog
+    # -------------------------------------------------------------------
+
+    def _show_name_dialog(self, lab_id, node_id, sensors):
+        """Prompt the user to name the freshly flashed node. Always records the flash."""
+        dialog = tk.Toplevel(self.app.root)
+        dialog.title("Name This Node")
+        dialog.geometry("360x160")
+        dialog.resizable(False, False)
+        dialog.grab_set()
+
+        tk.Label(
+            dialog,
+            text="Flash complete — Lab {}, Node {}".format(lab_id, node_id),
+            font=("Arial", 10, "bold"),
+        ).pack(pady=(14, 4))
+        tk.Label(dialog, text="Give this node a name? (optional)", font=("Arial", 9)).pack()
+
+        name_var = tk.StringVar()
+        name_entry = tk.Entry(dialog, textvariable=name_var, font=("Arial", 10), width=26)
+        name_entry.pack(pady=(6, 10))
+        name_entry.focus_set()
+
+        def commit(name):
+            dialog.destroy()
+            self.app.record_flash(lab_id, node_id, name or None, sensors)
+
+        name_entry.bind("<Return>", lambda _e: commit(name_var.get().strip()))
+
+        btn_frame = tk.Frame(dialog)
+        btn_frame.pack()
+        tk.Button(
+            btn_frame, text="Save", font=("Arial", 9, "bold"), bg="#4CAF50", fg="white", width=8,
+            command=lambda: commit(name_var.get().strip()),
+        ).pack(side="left", padx=6)
+        tk.Button(
+            btn_frame, text="Skip", font=("Arial", 9), width=8,
+            command=lambda: commit(None),
+        ).pack(side="left", padx=6)
+
+        dialog.wait_window()
+
+    # -------------------------------------------------------------------
     # Flash
     # -------------------------------------------------------------------
 
@@ -699,11 +749,16 @@ class FlashTab:
                 return
             lab_id = self.lab_id_var.get()
             node_id = self.node_id_var.get()
+            sensors_snapshot = list(self.sensors)
             self.log("Flashing transmitter (Lab {}, Node {}) -> {}".format(
                 lab_id, node_id, mount))
+
+            def on_success():
+                self.app.root.after(0, lambda: self._show_name_dialog(lab_id, node_id, sensors_snapshot))
+
             threading.Thread(
                 target=flash_transmitter,
-                args=(mount, lab_id, node_id, self.sensors, self.log),
+                args=(mount, lab_id, node_id, sensors_snapshot, self.log, on_success),
                 daemon=True,
             ).start()
         else:

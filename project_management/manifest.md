@@ -85,8 +85,9 @@
 
 | File | Description |
 |------|-------------|
-| [windows-exe/app.py](../windows-exe/app.py) | Tabbed Tkinter GUI and orchestration. Three tabs: Data Stream (log, start/stop), Receiver Pairing (discover transmitters, toggle listen), and Flash Device. Manages thread lifecycle, owns `node_last_seen`, `discovered_nodes`, `listened_nodes`, and `packet_queue`. Only pushes to Grafana for listened transmitters |
-| [windows-exe/flash_tab.py](../windows-exe/flash_tab.py) | Flash Device tab: template parser, code composer (generates `sensors.py` and `config.py` from sensor templates), drive scanner, and flash logic. Copies firmware + libraries to CircuitPython boards |
+| [windows-exe/app.py](../windows-exe/app.py) | Tabbed Tkinter GUI and orchestration. Three tabs: Data Stream (log, start/stop), Receiver Pairing (discover transmitters, toggle listen), and Flash Device. Manages thread lifecycle, owns `node_last_seen`, `discovered_nodes`, `listened_nodes`, `remembered_nodes`, `flashed_nodes`, and `packet_queue`. Only pushes to Grafana for listened transmitters |
+| [windows-exe/flash_tab.py](../windows-exe/flash_tab.py) | Flash Device tab: template parser, code composer (generates `sensors.py` and `config.py` from sensor templates), drive scanner, flash logic, and post-flash name dialog. Copies firmware + libraries to CircuitPython boards |
+| [windows-exe/storage.py](../windows-exe/storage.py) | Persistent state I/O. Reads and writes `%LOCALAPPDATA%\biosensing\state.json` (listened nodes, remembered nodes with names, flash history). No GUI, no serial, no Grafana |
 | [windows-exe/grafana.py](../windows-exe/grafana.py) | Grafana Cloud I/O. Loads credentials from `.env`, formats InfluxDB line protocol, pushes data and node status metrics |
 | [windows-exe/serial_reader.py](../windows-exe/serial_reader.py) | Serial port discovery (`scan_ports`) and receiver read loop (`read_from_receiver`). Puts decoded packets onto a queue. No Grafana logic |
 | [windows-exe/hex_parse.py](../windows-exe/hex_parse.py) | `decode_lora()` function. Parses a hex string into a structured dict following the v1 packet protocol |

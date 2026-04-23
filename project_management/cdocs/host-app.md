@@ -8,7 +8,8 @@ Python 3 Tkinter GUI (`windows-exe/app.py`) that reads LoRa data from the receiv
 
 | File | Responsibility |
 |------|---------------|
-| `app.py` | Tabbed GUI and orchestration. Owns `node_last_seen`, `discovered_nodes`, `listened_nodes`, and `packet_queue`. Manages thread lifecycle. Contains `DataStreamTab` (log view), `ReceiverPairingTab` (transmitter discovery and listen toggles), and `ReceiverApp` (orchestration). |
+| `app.py` | Tabbed GUI and orchestration. Owns `node_last_seen`, `discovered_nodes`, `listened_nodes`, `remembered_nodes`, `flashed_nodes`, and `packet_queue`. Manages thread lifecycle. Contains `DataStreamTab` (log view), `ReceiverPairingTab` (transmitter discovery and listen toggles), and `ReceiverApp` (orchestration). |
+| `storage.py` | Persistent state I/O. Reads/writes `%LOCALAPPDATA%\biosensing\state.json`. No GUI, no serial, no Grafana. |
 | `grafana.py` | Grafana Cloud I/O. Credentials, metric formatting, push functions. |
 | `serial_reader.py` | COM port discovery and serial read loop. Puts decoded packets onto a queue. |
 | `hex_parse.py` | Pure decoder. `decode_lora(hex_string)` → structured dict. No I/O. |
@@ -62,15 +63,29 @@ For each decoded packet:
 
 ---
 
-## Receiver Pairing (`app.py` — `ReceiverPairingTab`)
+## Persistent State (`app.py` + `storage.py`)
 
-Tabbed view that displays all transmitters discovered via incoming packets. Each unique `(lab_id, node_id)` pair gets a row showing the transmitter identity, last-seen time, and a listen toggle button (default: off).
+State is loaded on startup from `%LOCALAPPDATA%\biosensing\state.json` via `_load_initial_state()` and saved atomically (write-then-rename) by `_save()`. Three save triggers:
+- New node first discovered (in `consume_packets`)
+- Listen toggle changed (in `ReceiverPairingTab._toggle`)
+- Flash recorded (in `ReceiverApp.record_flash`)
+- Every 30 seconds in `status_loop` (to flush current `last_seen` timestamps)
 
 Module-level state:
-- `discovered_nodes: dict[(lab_id, node_id) → {"last_seen": float}]` — all transmitters seen since app start.
-- `listened_nodes: set[(lab_id, node_id)]` — transmitters whose packets should be pushed to Grafana.
+- `discovered_nodes: dict[(lab_id, node_id) → {"last_seen": float|None}]` — all nodes known this session plus nodes pre-loaded from storage.
+- `listened_nodes: set[(lab_id, node_id)]` — transmitters whose packets are pushed to Grafana. Persisted.
+- `remembered_nodes: dict["lab_id,node_id" → {"last_seen": float|None, "name": str|None}]` — persisted across sessions. Carries optional user-assigned names.
+- `flashed_nodes: list[dict]` — ordered flash history. Each record: `{lab_id, node_id, name, flashed_at, sensors: [{channel, template_name, params}]}`.
 
-The view refreshes every 2 seconds via `root.after()`. New transmitters are added as rows automatically. Toggling a transmitter on adds it to `listened_nodes`; toggling off removes it. Neither set persists across app restarts.
+`node_display_name(lab_id, node_id)` returns `"Name (Lab X/Node Y)"` if a name is stored, else `"Lab X, Node Y"`. Used in both the pairing tab and the broadcast strip.
+
+---
+
+## Receiver Pairing (`app.py` — `ReceiverPairingTab`)
+
+Tabbed view that displays all transmitters known (discovered this session or loaded from storage). Each unique `(lab_id, node_id)` pair gets a row showing identity, optional name, last-seen time, and a listen toggle button.
+
+The view refreshes every 2 seconds via `root.after()`. New transmitters are added as rows automatically. Toggling a transmitter calls `_save()`. Listen state and node names survive app restarts. Rows for nodes pre-loaded from storage appear immediately on launch with their stored last-seen time and name.
 
 ---
 

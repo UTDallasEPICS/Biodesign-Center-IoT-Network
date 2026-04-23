@@ -92,6 +92,7 @@ Pre-downloaded `.mpy` library files and directories from the [CircuitPython bund
 2. Generate `sensors.py` by composing selected sensor templates with user-chosen parameters.
 3. Copy `hardware/shared/packet.py` and `hardware/shared/code.py` to the board.
 4. Copy `adafruit_rfm9x.mpy` plus each sensor's declared libraries from `hardware/libraries/` to `{mount}lib/`.
+5. On success, show a name dialog ("Give this node a name? — optional"). Both Save and Skip call `ReceiverApp.record_flash(lab_id, node_id, name, sensors)`, which appends a record to `flashed_nodes` containing: `lab_id`, `node_id`, `name`, `flashed_at` (ISO timestamp), and `sensors` (list of `{channel, template_name, params}`). The full sensor config is stored so the node can be re-flashed identically by name.
 
 ### Receiver (GUI)
 

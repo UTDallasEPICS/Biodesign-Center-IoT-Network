@@ -14,7 +14,8 @@
 
 | Description | Severity | Difficulty |
 |---|---|---|
-| Write all sensor data and listening status to tmp folder windows | high | medium |
-| Flash display on exe | high | medium |
-| Display of all transmitters | high | medium |
-| Remove all PERIODIC_SEND_INTERVAL references | low | low |
+| Add ability to flash by name | high | medium |
+| Change Broadcasting: to Will broadcast: depending on stream state | medium | low |
+| Rename 'stream' to 'listening' | medium | low |
+| Add ability to forget/delete node | medium | low |
+
