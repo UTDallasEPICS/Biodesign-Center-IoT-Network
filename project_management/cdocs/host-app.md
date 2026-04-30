@@ -8,7 +8,7 @@ Python 3 Tkinter GUI (`windows-exe/app.py`) that reads LoRa data from the receiv
 
 | File | Responsibility |
 |------|---------------|
-| `app.py` | Tabbed GUI and orchestration. Owns `node_last_seen`, `discovered_nodes`, `listened_nodes`, `remembered_nodes`, `flashed_nodes`, and `packet_queue`. Manages thread lifecycle. Contains `DataStreamTab` (log view), `ReceiverPairingTab` (transmitter discovery and listen toggles), and `ReceiverApp` (orchestration). |
+| `app.py` | Tabbed GUI and orchestration. Owns `node_last_seen`, `discovered_nodes`, `listened_nodes`, `remembered_nodes`, `flashed_nodes`, and `packet_queue`. Manages thread lifecycle. Contains `DataStreamTab` (log view), `ReceiverPairingTab` (transmitter discovery, listen toggles, Forget), `KnownFlashesTab` (re-flash and delete saved flash records), and `ReceiverApp` (orchestration). |
 | `storage.py` | Persistent state I/O. Reads/writes `%LOCALAPPDATA%\biosensing\state.json`. No GUI, no serial, no Grafana. |
 | `grafana.py` | Grafana Cloud I/O. Credentials, metric formatting, push functions. |
 | `serial_reader.py` | COM port discovery and serial read loop. Puts decoded packets onto a queue. |
@@ -65,11 +65,19 @@ For each decoded packet:
 
 ## Persistent State (`app.py` + `storage.py`)
 
-State is loaded on startup from `%LOCALAPPDATA%\biosensing\state.json` via `_load_initial_state()` and saved atomically (write-then-rename) by `_save()`. Three save triggers:
+State is loaded on startup from `%LOCALAPPDATA%\biosensing\state.json` via `_load_initial_state()` and saved atomically (write-then-rename) by `_save()`. Save triggers:
 - New node first discovered (in `consume_packets`)
 - Listen toggle changed (in `ReceiverPairingTab._toggle`)
 - Flash recorded (in `ReceiverApp.record_flash`)
+- Node forgotten (in `ReceiverApp.forget_node` — removes from listened, remembered, discovered, last_seen, and drops matching `flashed_nodes` history)
+- Flash record deleted (in `ReceiverApp.delete_flash_record` — independent of node existence)
 - Every 30 seconds in `status_loop` (to flush current `last_seen` timestamps)
+
+### Uniqueness Invariants
+
+- `(lab_id, node_id)` is unique across `remembered_nodes`. Flash blocks an attempt to flash an ID already in use unless that ID has prior flash history (re-flash, confirmed via dialog).
+- Flash record names are unique (case-insensitive) across `flashed_nodes`. Re-flashing the same `(lab_id, node_id)` may keep its existing name (the dialog excludes the same pair from the uniqueness check).
+- A name is required at flash time. Discovered-but-not-flashed nodes may have `name: None` until adopted.
 
 Module-level state:
 - `discovered_nodes: dict[(lab_id, node_id) → {"last_seen": float|None}]` — all nodes known this session plus nodes pre-loaded from storage.
@@ -83,9 +91,20 @@ Module-level state:
 
 ## Receiver Pairing (`app.py` — `ReceiverPairingTab`)
 
-Tabbed view that displays all transmitters known (discovered this session or loaded from storage). Each unique `(lab_id, node_id)` pair gets a row showing identity, optional name, last-seen time, and a listen toggle button.
+Tabbed view that displays all transmitters known (discovered this session or loaded from storage). Each unique `(lab_id, node_id)` pair gets a row showing identity, optional name, last-seen time, a listen toggle button, and a Forget button.
 
-The view refreshes every 2 seconds via `root.after()`. New transmitters are added as rows automatically. Toggling a transmitter calls `_save()`. Listen state and node names survive app restarts. Rows for nodes pre-loaded from storage appear immediately on launch with their stored last-seen time and name.
+The view refreshes every 2 seconds via `root.after()`. New transmitters are added as rows automatically. Toggling a transmitter calls `_save()`. Forget prompts a confirm dialog and calls `ReceiverApp.forget_node`, which removes the node from all in-memory state, drops matching flash history, persists, and removes the row. Listen state and node names survive app restarts. Rows for nodes pre-loaded from storage appear immediately on launch with their stored last-seen time and name.
+
+---
+
+## Known Flashes (`app.py` — `KnownFlashesTab`)
+
+Lists every record in `flashed_nodes` (newest first). Each row shows name, Lab/Node, flashed_at, sensor summary, and two actions:
+
+- **Re-flash** → calls `FlashTab.load_from_flash_record(record)` to populate Lab ID, Node ID, and sensor list (matching `template_name` back to a parsed template; missing templates are skipped with a warning), then switches focus to the Flash Device tab.
+- **Delete** → confirm-then-remove via `ReceiverApp.delete_flash_record(index)`. Independent of whether the node was ever discovered; only the saved flash record is removed. The node row in Receiver Pairing is unaffected.
+
+Refreshes on `record_flash`, `forget_node`, and `delete_flash_record`.
 
 ---
 

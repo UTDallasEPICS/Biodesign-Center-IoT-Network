@@ -7,13 +7,12 @@
 # param: pin | Button Pin (Pull.UP) | pin | D12
 
 # --- imports ---
-from digitalio import DigitalInOut, Direction, Pull
+from digitalio import DigitalInOut, Pull
 
 # --- setup ---
-door_btn = DigitalInOut(board.{pin})
-door_btn.direction = Direction.INPUT
-door_btn.pull = Pull.UP
+door_sensor = DigitalInOut(board.{pin})
+door_sensor.switch_to_input(pull=Pull.UP)
 
 # --- read ---
 def read_door():
-    return door_btn.value
+    return door_sensor.value

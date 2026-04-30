@@ -4,12 +4,19 @@ import time
 from datetime import datetime
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 
 from grafana import GRAFANA_CLOUD_URL, GRAFANA_CLOUD_API_TOKEN, grafana_push, push_status
 from serial_reader import scan_ports, read_from_receiver
 from flash_tab import FlashTab
-from storage import load_state, save_state
+from storage import (
+    load_state,
+    save_state,
+    forget_node as storage_forget_node,
+    delete_flash as storage_delete_flash,
+    id_in_use,
+    name_in_use,
+)
 
 node_last_seen = {}  # (lab_id, node_id) -> time.time()
 discovered_nodes = {}  # (lab_id, node_id) -> {"last_seen": float|None}
@@ -240,12 +247,23 @@ class ReceiverPairingTab:
         )
         toggle_btn.pack(side="left", padx=4, pady=4)
 
+        forget_btn = tk.Button(
+            row,
+            text="Forget",
+            fg="#b71c1c",
+            font=("Arial", 9),
+            width=7,
+            command=lambda k=key: self._forget(k),
+        )
+        forget_btn.pack(side="left", padx=4, pady=4)
+
         self.node_rows[key] = {
             "row": row,
             "name_label": name_label,
             "seen_label": seen_label,
             "toggle_btn": toggle_btn,
             "btn_var": btn_var,
+            "forget_btn": forget_btn,
         }
 
     def _update_row(self, key, info, now):
@@ -281,6 +299,132 @@ class ReceiverPairingTab:
             widgets["toggle_btn"].config(text="Listening", bg="#4CAF50", fg="white")
         _save()
 
+    def _forget(self, key):
+        lab_id, node_id = key
+        label = node_display_name(lab_id, node_id)
+        if not messagebox.askyesno(
+            "Forget node",
+            f"Forget {label}?\n\nThis removes it from listened/remembered nodes and deletes\n"
+            "any flash history for this Lab/Node ID.",
+            parent=self.app.root,
+        ):
+            return
+        self.app.forget_node(key)
+
+    def _remove_row(self, key):
+        widgets = self.node_rows.pop(key, None)
+        if widgets:
+            widgets["row"].destroy()
+
+
+class KnownFlashesTab:
+    def __init__(self, parent, app):
+        self.app = app
+        self.frame = ttk.Frame(parent)
+        self.row_widgets = []
+
+        header = tk.Label(self.frame, text="Known Flashes", font=("Arial", 11, "bold"))
+        header.pack(pady=(10, 2))
+
+        hint = tk.Label(
+            self.frame,
+            text="Every successful flash is recorded here. Re-flash reproduces the exact "
+                 "sensor config; Delete removes only the saved record.",
+            font=("Arial", 9), fg="#666666", wraplength=600, justify="left",
+        )
+        hint.pack(pady=(0, 8), padx=10)
+
+        container = tk.Frame(self.frame)
+        container.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
+        self.canvas = tk.Canvas(container, bg="#f5f5f5", highlightthickness=0)
+        scrollbar = tk.Scrollbar(container, orient="vertical", command=self.canvas.yview)
+        self.scroll_frame = tk.Frame(self.canvas, bg="#f5f5f5")
+
+        self.scroll_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")),
+        )
+        self.canvas.create_window((0, 0), window=self.scroll_frame, anchor="nw")
+        self.canvas.configure(yscrollcommand=scrollbar.set)
+
+        scrollbar.pack(side="right", fill="y")
+        self.canvas.pack(side="left", fill="both", expand=True)
+
+        # Column headers
+        header_frame = tk.Frame(self.scroll_frame, bg="#e0e0e0")
+        header_frame.pack(fill="x", padx=2, pady=(2, 4))
+        tk.Label(header_frame, text="Name", font=("Arial", 9, "bold"), bg="#e0e0e0", width=18, anchor="w").pack(side="left", padx=(8, 0))
+        tk.Label(header_frame, text="Lab/Node", font=("Arial", 9, "bold"), bg="#e0e0e0", width=12, anchor="w").pack(side="left")
+        tk.Label(header_frame, text="Flashed", font=("Arial", 9, "bold"), bg="#e0e0e0", width=18, anchor="w").pack(side="left")
+        tk.Label(header_frame, text="Sensors", font=("Arial", 9, "bold"), bg="#e0e0e0", anchor="w").pack(side="left", fill="x", expand=True)
+
+        self.empty_label = None
+        self.refresh()
+
+    def refresh(self):
+        for w in self.row_widgets:
+            w.destroy()
+        self.row_widgets.clear()
+        if self.empty_label is not None:
+            self.empty_label.destroy()
+            self.empty_label = None
+
+        if not flashed_nodes:
+            self.empty_label = tk.Label(
+                self.scroll_frame,
+                text="No flashes recorded yet.",
+                font=("Arial", 9, "italic"), fg="#888888", bg="#f5f5f5",
+            )
+            self.empty_label.pack(pady=10)
+            return
+
+        # Newest first
+        for idx in range(len(flashed_nodes) - 1, -1, -1):
+            rec = flashed_nodes[idx]
+            self._add_row(idx, rec)
+
+    def _add_row(self, index, rec):
+        row = tk.Frame(self.scroll_frame, bg="#ffffff", relief="groove", bd=1)
+        row.pack(fill="x", padx=2, pady=2)
+
+        name = rec.get("name") or "(unnamed)"
+        tk.Label(row, text=name, font=("Arial", 9, "bold"),
+                 bg="#ffffff", width=18, anchor="w").pack(side="left", padx=(8, 0))
+
+        lab_id = rec.get("lab_id")
+        node_id = rec.get("node_id")
+        tk.Label(row, text=f"L{lab_id} / N{node_id}", font=("Consolas", 9),
+                 bg="#ffffff", width=12, anchor="w").pack(side="left")
+
+        flashed_at = rec.get("flashed_at", "")
+        tk.Label(row, text=flashed_at, font=("Consolas", 9),
+                 bg="#ffffff", width=18, anchor="w").pack(side="left")
+
+        sensors_summary = ", ".join(
+            s.get("template_name", s.get("channel", "?")) for s in rec.get("sensors", [])
+        ) or "(none)"
+        tk.Label(row, text=sensors_summary, font=("Arial", 9),
+                 bg="#ffffff", anchor="w", wraplength=240, justify="left").pack(
+            side="left", fill="x", expand=True, padx=(0, 4))
+
+        tk.Button(
+            row, text="Re-flash", font=("Arial", 9, "bold"),
+            bg="#2196F3", fg="white", width=9,
+            command=lambda r=rec: self._reflash(r),
+        ).pack(side="right", padx=4, pady=4)
+
+        tk.Button(
+            row, text="Delete", font=("Arial", 9), fg="#b71c1c", width=7,
+            command=lambda i=index: self.app.delete_flash_record(i),
+        ).pack(side="right", padx=4, pady=4)
+
+        self.row_widgets.append(row)
+
+    def _reflash(self, record):
+        self.app.flash_tab.load_from_flash_record(record)
+        self.app.notebook.select(self.app.flash_tab.frame)
+
 
 class ReceiverApp:
     def __init__(self, root):
@@ -298,10 +442,12 @@ class ReceiverApp:
 
         self.stream_tab = DataStreamTab(self.notebook, self)
         self.pairing_tab = ReceiverPairingTab(self.notebook, self)
+        self.known_flashes_tab = KnownFlashesTab(self.notebook, self)
         self.flash_tab = FlashTab(self.notebook, self)
 
         self.notebook.add(self.stream_tab.frame, text="  Data Stream  ")
         self.notebook.add(self.pairing_tab.frame, text="  Node Pairing  ")
+        self.notebook.add(self.known_flashes_tab.frame, text="  Known Flashes  ")
         self.notebook.add(self.flash_tab.frame, text="  Flash Device  ")
 
         self.log(f"Grafana URL: {GRAFANA_CLOUD_URL or 'N/A'}")
@@ -309,6 +455,15 @@ class ReceiverApp:
 
     def log(self, msg):
         self.stream_tab.log(msg)
+
+    def flashed_nodes_ref(self):
+        return flashed_nodes
+
+    def remembered_nodes_ref(self):
+        return remembered_nodes
+
+    def listened_nodes_ref(self):
+        return listened_nodes
 
     def _choose_port_dialog(self, candidates):
         """Modal dialog for choosing a COM port. Returns device string or None."""
@@ -391,6 +546,38 @@ class ReceiverApp:
         self.stream_tab.start_btn.config(state="normal")
         self.stream_tab.stop_btn.config(state="disabled")
 
+    def forget_node(self, key):
+        """Remove a (lab_id, node_id) from all persistent state and refresh UI."""
+        lab_id, node_id = key
+        label = node_display_name(lab_id, node_id)
+        storage_forget_node(lab_id, node_id, listened_nodes, remembered_nodes, flashed_nodes)
+        discovered_nodes.pop(key, None)
+        node_last_seen.pop(key, None)
+        _save()
+        self.pairing_tab._remove_row(key)
+        if hasattr(self, "known_flashes_tab"):
+            self.known_flashes_tab.refresh()
+        self.log(f"Forgot {label}.")
+
+    def delete_flash_record(self, index):
+        """Delete a single flash history entry by index."""
+        if not (0 <= index < len(flashed_nodes)):
+            return
+        rec = flashed_nodes[index]
+        label = rec.get("name") or f"Lab {rec.get('lab_id')}, Node {rec.get('node_id')}"
+        if not messagebox.askyesno(
+            "Delete flash record",
+            f"Delete flash record for '{label}'?\n\nThis only removes the saved flash entry. "
+            "The node itself remains paired/remembered if it has been seen on the air.",
+            parent=self.root,
+        ):
+            return
+        storage_delete_flash(flashed_nodes, index)
+        _save()
+        if hasattr(self, "known_flashes_tab"):
+            self.known_flashes_tab.refresh()
+        self.log(f"Deleted flash record: {label}")
+
     def record_flash(self, lab_id, node_id, name, sensors):
         """Record a successful transmitter flash. Called from the GUI thread."""
         record = {
@@ -423,10 +610,10 @@ class ReceiverApp:
         if name and key in self.pairing_tab.node_rows:
             self.pairing_tab.node_rows[key]["name_label"].config(text=name)
 
-        self.log(
-            f"Flash recorded: Lab {lab_id}, Node {node_id}"
-            + (f" — named '{name}'" if name else " (unnamed)")
-        )
+        if hasattr(self, "known_flashes_tab"):
+            self.known_flashes_tab.refresh()
+
+        self.log(f"Flash recorded: Lab {lab_id}, Node {node_id} — named '{name}'")
 
 
 root = tk.Tk()

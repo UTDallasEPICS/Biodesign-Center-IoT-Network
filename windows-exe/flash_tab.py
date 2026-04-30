@@ -4,8 +4,10 @@ import shutil
 import sys
 import threading
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 from datetime import datetime
+
+from storage import id_in_use, name_in_use
 
 
 # Board pin options for Adafruit Feather RP2040
@@ -440,6 +442,7 @@ class FlashTab:
         self.sensor_canvas.pack(side="left", fill="both", expand=True)
 
         self.sensor_rows = []
+        self._flashing = False
 
         # --- Drive / actions ---
         self.drive_frame = tk.LabelFrame(self.frame, text="Target Drive",
@@ -626,6 +629,41 @@ class FlashTab:
         dialog.wait_window()
 
     # -------------------------------------------------------------------
+    # Populate from a saved flash record
+    # -------------------------------------------------------------------
+
+    def load_from_flash_record(self, record):
+        """Populate the form from a `flashed_nodes` record. Returns True on success."""
+        self.role_var.set("transmitter")
+        self._on_role_change()
+
+        self.lab_id_var.set(int(record.get("lab_id", 1)))
+        self.node_id_var.set(int(record.get("node_id", 1)))
+
+        templates_by_name = {t["name"]: t for t in self.templates}
+        new_sensors = []
+        missing = []
+        for s in record.get("sensors", []):
+            tmpl = templates_by_name.get(s.get("template_name"))
+            if tmpl is None:
+                missing.append(s.get("template_name") or s.get("channel") or "?")
+                continue
+            new_sensors.append({"template": tmpl, "param_values": dict(s.get("params", {}))})
+
+        self.sensors = new_sensors
+        self._refresh_sensor_list()
+
+        label = record.get("name") or "Lab {}, Node {}".format(
+            record.get("lab_id"), record.get("node_id")
+        )
+        if missing:
+            self.log("Loaded '{}' — missing templates skipped: {}".format(
+                label, ", ".join(missing)))
+        else:
+            self.log("Loaded '{}' from flash history. Set drive and click Flash.".format(label))
+        return True
+
+    # -------------------------------------------------------------------
     # Drive scan
     # -------------------------------------------------------------------
 
@@ -685,11 +723,11 @@ class FlashTab:
     # Post-flash name dialog
     # -------------------------------------------------------------------
 
-    def _show_name_dialog(self, lab_id, node_id, sensors):
-        """Prompt the user to name the freshly flashed node. Always records the flash."""
+    def _show_name_dialog(self, lab_id, node_id, sensors, prefill=None):
+        """Prompt for a required, unique name for the freshly flashed node."""
         dialog = tk.Toplevel(self.app.root)
         dialog.title("Name This Node")
-        dialog.geometry("360x160")
+        dialog.geometry("380x190")
         dialog.resizable(False, False)
         dialog.grab_set()
 
@@ -698,28 +736,37 @@ class FlashTab:
             text="Flash complete — Lab {}, Node {}".format(lab_id, node_id),
             font=("Arial", 10, "bold"),
         ).pack(pady=(14, 4))
-        tk.Label(dialog, text="Give this node a name? (optional)", font=("Arial", 9)).pack()
+        tk.Label(dialog, text="Name this node (required, must be unique):",
+                 font=("Arial", 9)).pack()
 
-        name_var = tk.StringVar()
-        name_entry = tk.Entry(dialog, textvariable=name_var, font=("Arial", 10), width=26)
-        name_entry.pack(pady=(6, 10))
+        name_var = tk.StringVar(value=prefill or "")
+        name_entry = tk.Entry(dialog, textvariable=name_var, font=("Arial", 10), width=28)
+        name_entry.pack(pady=(6, 4))
         name_entry.focus_set()
+        name_entry.icursor("end")
 
-        def commit(name):
+        error_var = tk.StringVar(value="")
+        tk.Label(dialog, textvariable=error_var, fg="red", font=("Arial", 9)).pack()
+
+        def commit():
+            name = name_var.get().strip()
+            if not name:
+                error_var.set("Name is required.")
+                return
+            if name_in_use(self.app.flashed_nodes_ref(), name,
+                           exclude_pair=(lab_id, node_id)):
+                error_var.set("That name is already used by another flash record.")
+                return
             dialog.destroy()
-            self.app.record_flash(lab_id, node_id, name or None, sensors)
+            self.app.record_flash(lab_id, node_id, name, sensors)
 
-        name_entry.bind("<Return>", lambda _e: commit(name_var.get().strip()))
+        name_entry.bind("<Return>", lambda _e: commit())
 
         btn_frame = tk.Frame(dialog)
-        btn_frame.pack()
+        btn_frame.pack(pady=(4, 8))
         tk.Button(
             btn_frame, text="Save", font=("Arial", 9, "bold"), bg="#4CAF50", fg="white", width=8,
-            command=lambda: commit(name_var.get().strip()),
-        ).pack(side="left", padx=6)
-        tk.Button(
-            btn_frame, text="Skip", font=("Arial", 9), width=8,
-            command=lambda: commit(None),
+            command=commit,
         ).pack(side="left", padx=6)
 
         dialog.wait_window()
@@ -729,6 +776,10 @@ class FlashTab:
     # -------------------------------------------------------------------
 
     def _flash(self):
+        if self._flashing:
+            self.log("Flash already in progress.")
+            return
+
         drive = self.drive_var.get().strip().upper()
         if not drive:
             self.log("Enter a drive letter first.")
@@ -749,22 +800,66 @@ class FlashTab:
                 return
             lab_id = self.lab_id_var.get()
             node_id = self.node_id_var.get()
+
+            remembered = self.app.remembered_nodes_ref()
+            flashed = self.app.flashed_nodes_ref()
+            if id_in_use(remembered, lab_id, node_id):
+                has_history = any(
+                    r.get("lab_id") == lab_id and r.get("node_id") == node_id
+                    for r in flashed
+                )
+                if has_history:
+                    existing_name = remembered.get(f"{lab_id},{node_id}", {}).get("name") \
+                        or "this node"
+                    if not messagebox.askyesno(
+                        "Re-flash existing node",
+                        "Lab {}, Node {} is already flashed as '{}'.\n\n"
+                        "Re-flash this node?".format(lab_id, node_id, existing_name),
+                        parent=self.app.root,
+                    ):
+                        self.log("Flash cancelled.")
+                        return
+                else:
+                    existing_name = remembered.get(f"{lab_id},{node_id}", {}).get("name")
+                    label = existing_name or "Lab {}, Node {}".format(lab_id, node_id)
+                    messagebox.showerror(
+                        "ID already in use",
+                        "Lab {}, Node {} is already known ({}).\n\n"
+                        "Pick a different ID, or Forget that node in the Node Pairing tab first."
+                        .format(lab_id, node_id, label),
+                        parent=self.app.root,
+                    )
+                    self.log("Flash blocked: Lab {}, Node {} already in use.".format(lab_id, node_id))
+                    return
+
             sensors_snapshot = list(self.sensors)
+            existing_name = remembered.get(f"{lab_id},{node_id}", {}).get("name")
             self.log("Flashing transmitter (Lab {}, Node {}) -> {}".format(
                 lab_id, node_id, mount))
 
             def on_success():
-                self.app.root.after(0, lambda: self._show_name_dialog(lab_id, node_id, sensors_snapshot))
+                self.app.root.after(
+                    0,
+                    lambda: self._show_name_dialog(lab_id, node_id, sensors_snapshot, prefill=existing_name),
+                )
 
-            threading.Thread(
-                target=flash_transmitter,
-                args=(mount, lab_id, node_id, sensors_snapshot, self.log, on_success),
-                daemon=True,
-            ).start()
+            self._flashing = True
+
+            def _run_tx():
+                try:
+                    flash_transmitter(mount, lab_id, node_id, sensors_snapshot, self.log, on_success)
+                finally:
+                    self._flashing = False
+
+            threading.Thread(target=_run_tx, daemon=True).start()
         else:
             self.log("Flashing receiver -> {}".format(mount))
-            threading.Thread(
-                target=flash_receiver,
-                args=(mount, self.log),
-                daemon=True,
-            ).start()
+            self._flashing = True
+
+            def _run_rx():
+                try:
+                    flash_receiver(mount, self.log)
+                finally:
+                    self._flashing = False
+
+            threading.Thread(target=_run_rx, daemon=True).start()

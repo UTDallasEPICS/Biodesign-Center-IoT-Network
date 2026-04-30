@@ -88,11 +88,24 @@ Pre-downloaded `.mpy` library files and directories from the [CircuitPython bund
 
 ### Transmitter (GUI)
 
-1. Generate `config.py` from Lab ID, Node ID, and sensor channel list.
-2. Generate `sensors.py` by composing selected sensor templates with user-chosen parameters.
-3. Copy `hardware/shared/packet.py` and `hardware/shared/code.py` to the board.
-4. Copy `adafruit_rfm9x.mpy` plus each sensor's declared libraries from `hardware/libraries/` to `{mount}lib/`.
-5. On success, show a name dialog ("Give this node a name? — optional"). Both Save and Skip call `ReceiverApp.record_flash(lab_id, node_id, name, sensors)`, which appends a record to `flashed_nodes` containing: `lab_id`, `node_id`, `name`, `flashed_at` (ISO timestamp), and `sensors` (list of `{channel, template_name, params}`). The full sensor config is stored so the node can be re-flashed identically by name.
+1. **Pre-flash uniqueness check.** If `(lab_id, node_id)` is already in `remembered_nodes`:
+   - With prior flash history → confirm "Re-flash existing node 'X' (Lab L, Node N)?" and proceed only on Yes.
+   - With no flash history → block with an error pointing at Forget in the Node Pairing tab.
+2. Generate `config.py` from Lab ID, Node ID, and sensor channel list.
+3. Generate `sensors.py` by composing selected sensor templates with user-chosen parameters.
+4. Copy `hardware/shared/packet.py` and `hardware/shared/code.py` to the board.
+5. Copy `adafruit_rfm9x.mpy` plus each sensor's declared libraries from `hardware/libraries/` to `{mount}lib/`.
+6. On success, show a name dialog. **Name is required and must be unique** across `flashed_nodes` (case-insensitive). Re-flashes pre-fill the existing name and exempt that `(lab_id, node_id)` from the uniqueness check so the prior name can be kept. Save calls `ReceiverApp.record_flash(lab_id, node_id, name, sensors)`, which appends a record to `flashed_nodes` containing: `lab_id`, `node_id`, `name`, `flashed_at` (ISO timestamp), and `sensors` (list of `{channel, template_name, params}`). The full sensor config is stored so the node can be re-flashed identically.
+
+### Re-flash (from Known Flashes tab)
+
+`KnownFlashesTab` lists every saved flash record. The Re-flash button calls `FlashTab.load_from_flash_record(record)`, which:
+- switches the role to transmitter,
+- sets `lab_id_var` and `node_id_var`,
+- rebuilds the sensor list by matching each `template_name` back to a parsed template (missing templates are skipped with a warning),
+- focuses the Flash Device tab so the user can pick a drive and click Flash.
+
+The Delete button on the same tab removes only the saved record (the node remains in `remembered_nodes` if it was ever discovered).
 
 ### Receiver (GUI)
 
