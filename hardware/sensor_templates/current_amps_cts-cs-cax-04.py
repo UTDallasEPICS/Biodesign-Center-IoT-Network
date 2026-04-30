@@ -10,7 +10,7 @@
 from analogio import AnalogIn
 
 # --- setup ---
-power_pin = AnalogIn(board.A0)
+power_pin = AnalogIn(board.{pin})
 
 
 # --- read ---
