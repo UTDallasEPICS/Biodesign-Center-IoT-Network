@@ -595,6 +595,11 @@ class FlashTab:
                     tk.Spinbox(row, from_=0, to=100, textvariable=var,
                                width=5, font=("Arial", 9)).pack(side="right", padx=4)
                     param_widgets[p["key"]] = var
+                elif p["type"] == "number":
+                    var = tk.StringVar(value=p["default"])
+                    tk.Entry(row, textvariable=var, width=8,
+                             font=("Consolas", 9)).pack(side="right", padx=4)
+                    param_widgets[p["key"]] = var
 
         listbox.bind("<<ListboxSelect>>", on_type_select)
         on_type_select()
@@ -803,6 +808,7 @@ class FlashTab:
 
             remembered = self.app.remembered_nodes_ref()
             flashed = self.app.flashed_nodes_ref()
+            is_reflash = False
             if id_in_use(remembered, lab_id, node_id):
                 has_history = any(
                     r.get("lab_id") == lab_id and r.get("node_id") == node_id
@@ -819,6 +825,7 @@ class FlashTab:
                     ):
                         self.log("Flash cancelled.")
                         return
+                    is_reflash = True
                 else:
                     existing_name = remembered.get(f"{lab_id},{node_id}", {}).get("name")
                     label = existing_name or "Lab {}, Node {}".format(lab_id, node_id)
@@ -838,10 +845,16 @@ class FlashTab:
                 lab_id, node_id, mount))
 
             def on_success():
-                self.app.root.after(
-                    0,
-                    lambda: self._show_name_dialog(lab_id, node_id, sensors_snapshot, prefill=existing_name),
-                )
+                if is_reflash:
+                    self.app.root.after(
+                        0,
+                        lambda: self.app.record_flash(lab_id, node_id, existing_name, sensors_snapshot),
+                    )
+                else:
+                    self.app.root.after(
+                        0,
+                        lambda: self._show_name_dialog(lab_id, node_id, sensors_snapshot),
+                    )
 
             self._flashing = True
 

@@ -56,6 +56,7 @@ def read_<channel>():
 
 - `pin` — dropdown of board pins (D0–D25, A0–A3)
 - `percent` — spinbox 0–100, substituted as an integer
+- `number` — free-entry text field, substituted as-is (supports integers and floats)
 
 ### Composition Rules
 

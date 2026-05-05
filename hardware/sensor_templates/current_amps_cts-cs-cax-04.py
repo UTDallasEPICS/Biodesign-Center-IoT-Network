@@ -4,17 +4,27 @@
 # trigger: none
 # libraries:
 #
-# param: pin | A0
+# param: pin | Analog Pin | pin | A0
 
 # --- imports ---
+import time
 from analogio import AnalogIn
 
 # --- setup ---
-power_pin = AnalogIn(board.A0)
-
+power_pin = AnalogIn(board.{pin})
+VBase = 2.521263
+Sensitivity = 2/75.0
+MCUVoltage = 3.3
 
 # --- read ---
-def read_current():
-    voltage = (power_pin.value * 5.0) / 65535
-    current = (voltage - 0.5) * (75 / 4.0) 
-    return current
+def read_current_amps():
+    total = 0
+    samples = 300
+    interval = 3.0 / samples
+    for _ in range(samples):
+        # Vout = (power_pin.value / 65535.0) * MCUVoltage
+        # Amps = (Vout - VBase) / Sensitivity
+        # total += Amps
+        total += power_pin.value
+        time.sleep(interval)
+    return (total / samples)

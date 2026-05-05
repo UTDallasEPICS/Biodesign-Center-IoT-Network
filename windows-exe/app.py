@@ -594,7 +594,14 @@ class ReceiverApp:
                 for s in sensors
             ],
         }
-        flashed_nodes.append(record)
+        existing_idx = None
+        for i, r in enumerate(flashed_nodes):
+            if r.get("lab_id") == lab_id and r.get("node_id") == node_id:
+                existing_idx = i
+        if existing_idx is not None:
+            flashed_nodes[existing_idx] = record
+        else:
+            flashed_nodes.append(record)
 
         key_str = f"{lab_id},{node_id}"
         if key_str in remembered_nodes:
