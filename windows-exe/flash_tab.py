@@ -562,16 +562,25 @@ class FlashTab:
         param_frame.pack(fill="x", padx=16, pady=(8, 4))
 
         param_widgets = {}
+        selected_idx = [None]
 
         def on_type_select(event=None):
+            sel = listbox.curselection()
+            if not sel:
+                # Focus transitions (e.g. picking a value in a readonly Combobox)
+                # can fire <<ListboxSelect>> with no selection. Don't rebuild —
+                # destroying the param widgets here loses the user's input.
+                return
+            idx = sel[0]
+            if idx == selected_idx[0]:
+                return
+            selected_idx[0] = idx
+
             for w in param_frame.winfo_children():
                 w.destroy()
             param_widgets.clear()
 
-            sel = listbox.curselection()
-            if not sel:
-                return
-            tmpl = self.templates[sel[0]]
+            tmpl = self.templates[idx]
 
             if not tmpl["params"]:
                 tk.Label(param_frame, text="No configurable parameters",
@@ -609,10 +618,10 @@ class FlashTab:
                  font=("Arial", 9)).pack(pady=(0, 2))
 
         def on_add():
-            sel = listbox.curselection()
-            if not sel:
+            idx = selected_idx[0]
+            if idx is None:
                 return
-            tmpl = self.templates[sel[0]]
+            tmpl = self.templates[idx]
 
             for existing in self.sensors:
                 if existing["template"]["channel"] == tmpl["channel"]:
