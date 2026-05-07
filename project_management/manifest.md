@@ -86,7 +86,12 @@
 | File | Description |
 |------|-------------|
 | [windows-exe/app.py](../windows-exe/app.py) | Tabbed Tkinter GUI and orchestration. Three tabs: Data Stream (log, start/stop), Receiver Pairing (discover transmitters, toggle listen), and Flash Device. Manages thread lifecycle, owns `node_last_seen`, `discovered_nodes`, `listened_nodes`, `remembered_nodes`, `flashed_nodes`, and `packet_queue`. Only pushes to Grafana for listened transmitters |
-| [windows-exe/flash_tab.py](../windows-exe/flash_tab.py) | Flash Device tab: template parser, code composer (generates `sensors.py` and `config.py` from sensor templates), drive scanner, flash logic, and post-flash name dialog. Copies firmware + libraries to CircuitPython boards |
+| [windows-exe/flash_tab.py](../windows-exe/flash_tab.py) | Flash Device tab: `FlashTab` GUI class. Builds the widget tree, owns sensor list state, dispatches flash actions on a worker thread. Pure UI/orchestration — delegates parsing, composing, drive I/O, and dialogs to the modules below |
+| [windows-exe/flash_paths.py](../windows-exe/flash_paths.py) | Shared paths and constants for the flash modules: `BOARD_PINS` and resolved `TEMPLATES_DIR` / `SHARED_DIR` / `RECEIVER_DIR` / `LIBRARIES_DIR` (handles PyInstaller `sys._MEIPASS`) |
+| [windows-exe/flash_templates.py](../windows-exe/flash_templates.py) | Sensor template parser: `parse_template`, `discover_templates`, and `match_sensor_records` for resolving saved flash records back to live templates |
+| [windows-exe/flash_compose.py](../windows-exe/flash_compose.py) | Code composer: `compose_sensors_py` and `compose_config_py` build the strings written to the board. Pure functions, no I/O |
+| [windows-exe/flash_actions.py](../windows-exe/flash_actions.py) | Drive scanning, file copying, and flash sequences: `scan_drives`, `flash_transmitter`, `flash_receiver`, plus `check_transmitter_id_status` for the pre-flash uniqueness classification |
+| [windows-exe/flash_dialogs.py](../windows-exe/flash_dialogs.py) | Tk dialog helpers: `open_add_sensor_dialog`, `open_name_dialog`, `open_code_preview`, plus `confirm_reflash` and `show_id_blocked` messageboxes |
 | [windows-exe/storage.py](../windows-exe/storage.py) | Persistent state I/O. Reads and writes `%LOCALAPPDATA%\biosensing\state.json` (listened nodes, remembered nodes with names, flash history). No GUI, no serial, no Grafana |
 | [windows-exe/grafana.py](../windows-exe/grafana.py) | Grafana Cloud I/O. Loads credentials from `.env`, formats InfluxDB line protocol, pushes data and node status metrics |
 | [windows-exe/serial_reader.py](../windows-exe/serial_reader.py) | Serial port discovery (`scan_ports`) and receiver read loop (`read_from_receiver`). Puts decoded packets onto a queue. No Grafana logic |

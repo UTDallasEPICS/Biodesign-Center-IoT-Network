@@ -1,385 +1,16 @@
 import os
-import re
-import shutil
-import sys
 import threading
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk
 from datetime import datetime
 
-from storage import id_in_use, name_in_use
+from flash_actions import check_transmitter_id_status, flash_receiver, flash_transmitter, scan_drives
+from flash_compose import compose_config_py, compose_sensors_py
+from flash_dialogs import (
+    confirm_reflash, open_add_sensor_dialog, open_code_preview, open_name_dialog, show_id_blocked,
+)
+from flash_templates import discover_templates, match_sensor_records
 
-
-# Board pin options for Adafruit Feather RP2040
-BOARD_PINS = [
-    "D0", "D1", "D4", "D5", "D6", "D9", "D10", "D11", "D12", "D13",
-    "D24", "D25", "A0", "A1", "A2", "A3",
-]
-
-# Paths: when frozen by PyInstaller, bundled data lives under sys._MEIPASS;
-# otherwise resolve relative to the repo root (one level up from windows-exe/).
-if getattr(sys, "frozen", False):
-    _DATA_ROOT = sys._MEIPASS
-else:
-    _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-    _DATA_ROOT = os.path.normpath(os.path.join(_SCRIPT_DIR, ".."))
-
-_TEMPLATES_DIR = os.path.join(_DATA_ROOT, "hardware", "sensor_templates")
-_SHARED_DIR = os.path.join(_DATA_ROOT, "hardware", "shared")
-_RECEIVER_DIR = os.path.join(_DATA_ROOT, "hardware", "receiver")
-_LIBRARIES_DIR = os.path.join(_DATA_ROOT, "hardware", "libraries")
-
-
-# ---------------------------------------------------------------------------
-# Template parser
-# ---------------------------------------------------------------------------
-
-def parse_template(filepath):
-    """Parse a sensor template file into metadata and code sections."""
-    with open(filepath, "r") as f:
-        text = f.read()
-
-    meta = {
-        "filepath": filepath,
-        "name": "",
-        "channel": "",
-        "trigger": "none",
-        "libraries": [],
-        "params": [],
-    }
-
-    # Parse structured comment headers
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped == "# --- imports ---":
-            break
-        m = re.match(r"#\s*name:\s*(.+)", stripped)
-        if m:
-            meta["name"] = m.group(1).strip()
-            continue
-        m = re.match(r"#\s*channel:\s*(.+)", stripped)
-        if m:
-            meta["channel"] = m.group(1).strip()
-            continue
-        m = re.match(r"#\s*trigger:\s*(.+)", stripped)
-        if m:
-            meta["trigger"] = m.group(1).strip()
-            continue
-        m = re.match(r"#\s*libraries:\s*(.*)", stripped)
-        if m:
-            libs = m.group(1).strip()
-            meta["libraries"] = [l.strip() for l in libs.split(",") if l.strip()] if libs else []
-            continue
-        m = re.match(r"#\s*param:\s*(.+)", stripped)
-        if m:
-            parts = [p.strip() for p in m.group(1).split("|")]
-            if len(parts) == 4:
-                meta["params"].append({
-                    "key": parts[0],
-                    "label": parts[1],
-                    "type": parts[2],
-                    "default": parts[3],
-                })
-
-    # Parse code sections delimited by "# --- <name> ---"
-    sections = {"imports": "", "setup": "", "read": ""}
-    current = None
-    lines_buf = []
-
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped == "# --- imports ---":
-            current = "imports"
-            lines_buf = []
-            continue
-        elif stripped == "# --- setup ---":
-            if current is not None:
-                sections[current] = "\n".join(lines_buf).strip()
-            current = "setup"
-            lines_buf = []
-            continue
-        elif stripped == "# --- read ---":
-            if current is not None:
-                sections[current] = "\n".join(lines_buf).strip()
-            current = "read"
-            lines_buf = []
-            continue
-
-        if current is not None:
-            lines_buf.append(line)
-
-    if current is not None:
-        sections[current] = "\n".join(lines_buf).strip()
-
-    meta["sections"] = sections
-    return meta
-
-
-def discover_templates():
-    """Scan hardware/sensor_templates/ and return a list of parsed templates."""
-    if not os.path.isdir(_TEMPLATES_DIR):
-        return []
-    templates = []
-    for fname in sorted(os.listdir(_TEMPLATES_DIR)):
-        if fname.endswith(".py"):
-            try:
-                templates.append(parse_template(os.path.join(_TEMPLATES_DIR, fname)))
-            except Exception:
-                pass
-    return templates
-
-
-# ---------------------------------------------------------------------------
-# Code composer
-# ---------------------------------------------------------------------------
-
-def compose_sensors_py(sensors):
-    """Build a complete sensors.py from a list of configured sensors.
-
-    Each entry: {"template": parsed_template, "param_values": {key: value}}
-    """
-    all_imports = []
-    seen_imports = set()
-    setup_lines = []
-    seen_setup = set()
-    read_blocks = []
-    channels = []
-    trigger_types = {}
-
-    for sensor in sensors:
-        tmpl = sensor["template"]
-        params = sensor["param_values"]
-        channel = tmpl["channel"]
-        channels.append(channel)
-
-        # Substitute {param} placeholders in each section
-        imports_text = tmpl["sections"]["imports"]
-        setup_text = tmpl["sections"]["setup"]
-        read_text = tmpl["sections"]["read"]
-
-        for key, val in params.items():
-            placeholder = "{" + key + "}"
-            imports_text = imports_text.replace(placeholder, str(val))
-            setup_text = setup_text.replace(placeholder, str(val))
-            read_text = read_text.replace(placeholder, str(val))
-
-        # Collect imports (deduplicate, preserve order)
-        for line in imports_text.splitlines():
-            stripped = line.strip()
-            if stripped and stripped not in seen_imports:
-                all_imports.append(stripped)
-                seen_imports.add(stripped)
-
-        # Collect setup lines (deduplicate identical lines for shared resources)
-        for line in setup_text.splitlines():
-            stripped = line.strip()
-            if stripped and stripped not in seen_setup:
-                setup_lines.append(line)
-                seen_setup.add(stripped)
-
-        read_blocks.append(read_text)
-
-        if tmpl["trigger"] == "edge":
-            trigger_types[channel] = "edge"
-
-    # Assemble the file
-    parts = []
-    parts.append("# sensors.py")
-    parts.append("# Generated by Flash Device tab")
-    parts.append("#")
-    for ch in channels:
-        parts.append("#   read_{}()".format(ch))
-
-    parts.append("")
-    parts.append("import board")
-    for imp in all_imports:
-        parts.append(imp)
-
-    parts.append("")
-    parts.append("# " + "-" * 75)
-    parts.append("# Pin setup")
-    parts.append("# " + "-" * 75)
-    parts.append("")
-    parts.extend(setup_lines)
-
-    parts.append("")
-    parts.append("")
-    parts.append("# " + "-" * 75)
-    parts.append("# Public interface")
-    parts.append("# " + "-" * 75)
-    parts.append("")
-    parts.append("\n\n".join(read_blocks))
-
-    parts.append("")
-    parts.append("")
-    parts.append("# " + "-" * 75)
-    parts.append("# Generic interface for shared/code.py")
-    parts.append("# " + "-" * 75)
-    parts.append("")
-    parts.append("READERS = {")
-    for ch in channels:
-        parts.append("    \"{}\": read_{},".format(ch, ch))
-    parts.append("}")
-    parts.append("")
-    parts.append("TRIGGER_TYPE = {")
-    for ch in channels:
-        if ch in trigger_types:
-            parts.append("    \"{}\": \"{}\",".format(ch, trigger_types[ch]))
-    parts.append("}")
-    parts.append("")
-
-    return "\n".join(parts)
-
-
-def compose_config_py(lab_id, node_id, sensors):
-    """Build a config.py from node identity and sensor list."""
-    channels = [s["template"]["channel"] for s in sensors]
-    sensor_entries = "\n".join(
-        "    {{\"channel\": \"{}\"}},".format(ch) for ch in channels
-    )
-
-    return (
-        "# =============================================================\n"
-        "# Transmitter Node Configuration\n"
-        "# Generated by Flash Device tab\n"
-        "# =============================================================\n"
-        "\n"
-        "# --- Network Identity ---\n"
-        "LAB_ID  = {lab:#04x}   # Physical lab this node belongs to (1-255, 0 reserved)\n"
-        "NODE_ID = {node:#04x}   # Unique ID for this transmitter board (1-255)\n"
-        "\n"
-        "# --- Radio ---\n"
-        "RADIO_FREQ_MHZ = 915.0\n"
-        "TX_POWER       = 5\n"
-        "RECEIVER_NODE  = 0x01\n"
-        "ACK_RETRIES    = 3\n"
-        "ACK_WAIT       = 0.5\n"
-        "CSMA_DELAY_MAX = 0.1\n"
-        "\n"
-        "# --- Timing ---\n"
-        "HEARTBEAT_INTERVAL = 30\n"
-        "POLL_INTERVAL      = 1\n"
-        "\n"
-        "# --- Sensor Definitions ---\n"
-        "SENSORS = [\n"
-        "{entries}\n"
-        "]\n"
-    ).format(lab=lab_id, node=node_id, entries=sensor_entries)
-
-
-# ---------------------------------------------------------------------------
-# Drive scanning and flash logic
-# ---------------------------------------------------------------------------
-
-def scan_drives():
-    """Check A:-Z: for boot_out.txt (CircuitPython board marker). Returns list of letters."""
-    found = []
-    for letter in "DEFGHIJKLMNOPQRSTUVWXYZABC":
-        path = "{}:/".format(letter)
-        try:
-            if os.path.isfile(os.path.join(path, "boot_out.txt")):
-                found.append(letter)
-        except OSError:
-            pass
-    return found
-
-
-def _copy_libraries(mount, lib_names, log_fn):
-    """Copy named libraries from hardware/libraries/ to {mount}lib/."""
-    if not lib_names:
-        return
-
-    lib_dest = os.path.join(mount, "lib")
-    os.makedirs(lib_dest, exist_ok=True)
-
-    for lib_name in sorted(lib_names):
-        src = os.path.join(_LIBRARIES_DIR, lib_name)
-        dst = os.path.join(lib_dest, lib_name)
-        if os.path.isdir(src):
-            if os.path.exists(dst):
-                shutil.rmtree(dst)
-            shutil.copytree(src, dst)
-            log_fn("  lib/{} (library dir)".format(lib_name))
-        elif os.path.isfile(src):
-            shutil.copy2(src, dst)
-            log_fn("  lib/{} (library)".format(lib_name))
-        else:
-            log_fn("  WARNING: library '{}' not found in hardware/libraries/ — skipped".format(lib_name))
-
-
-def flash_transmitter(mount, lab_id, node_id, sensors, log_fn, on_success=None):
-    """Generate and copy all transmitter files to the board.
-
-    on_success is called with no arguments after a successful flash (from the
-    calling thread). The caller is responsible for marshalling to the GUI thread
-    if needed.
-    """
-    try:
-        config_code = compose_config_py(lab_id, node_id, sensors)
-        sensors_code = compose_sensors_py(sensors)
-
-        config_path = os.path.join(mount, "config.py")
-        with open(config_path, "w", newline="\n") as f:
-            f.write(config_code)
-        log_fn("  config.py (generated)")
-
-        sensors_path = os.path.join(mount, "sensors.py")
-        with open(sensors_path, "w", newline="\n") as f:
-            f.write(sensors_code)
-        log_fn("  sensors.py (generated)")
-
-        for fname in ("packet.py", "code.py"):
-            src = os.path.join(_SHARED_DIR, fname)
-            if os.path.isfile(src):
-                shutil.copy2(src, os.path.join(mount, fname))
-                log_fn("  {} (shared)".format(fname))
-            else:
-                log_fn("  WARNING: {} not found — skipped".format(src))
-
-        # Collect all required libraries: base radio lib + sensor-specific
-        needed = {"adafruit_rfm9x.mpy"}
-        for sensor in sensors:
-            for lib in sensor["template"]["libraries"]:
-                needed.add(lib)
-        _copy_libraries(mount, needed, log_fn)
-
-        log_fn("")
-        log_fn("Flash complete.")
-        if on_success:
-            on_success()
-    except Exception as e:
-        log_fn("ERROR: {}".format(e))
-
-
-def flash_receiver(mount, log_fn):
-    """Copy receiver firmware files to the board."""
-    try:
-        for fname in ("code.py", "config.py"):
-            src = os.path.join(_RECEIVER_DIR, fname)
-            if os.path.isfile(src):
-                shutil.copy2(src, os.path.join(mount, fname))
-                log_fn("  {}".format(fname))
-            else:
-                log_fn("  WARNING: {} not found — skipped".format(src))
-
-        src = os.path.join(_SHARED_DIR, "packet.py")
-        if os.path.isfile(src):
-            shutil.copy2(src, os.path.join(mount, "packet.py"))
-            log_fn("  packet.py (shared)")
-        else:
-            log_fn("  WARNING: packet.py not found — skipped")
-
-        _copy_libraries(mount, {"adafruit_rfm9x.mpy"}, log_fn)
-
-        log_fn("")
-        log_fn("Flash complete.")
-    except Exception as e:
-        log_fn("ERROR: {}".format(e))
-
-
-# ---------------------------------------------------------------------------
-# GUI — Flash Tab
-# ---------------------------------------------------------------------------
 
 class FlashTab:
     def __init__(self, parent, app):
@@ -387,8 +18,9 @@ class FlashTab:
         self.frame = ttk.Frame(parent)
         self.templates = discover_templates()
         self.sensors = []  # [{"template": ..., "param_values": {key: value}}, ...]
+        self.sensor_rows = []
+        self._flashing = False
 
-        # --- Role selection ---
         self.role_frame = tk.LabelFrame(self.frame, text="Role", font=("Arial", 10, "bold"))
         self.role_frame.pack(fill="x", padx=10, pady=(10, 4))
 
@@ -398,7 +30,6 @@ class FlashTab:
         tk.Radiobutton(self.role_frame, text="Receiver", variable=self.role_var,
                        value="receiver", command=self._on_role_change).pack(side="left", padx=10)
 
-        # --- Transmitter config ---
         self.tx_frame = tk.LabelFrame(self.frame, text="Transmitter Configuration",
                                       font=("Arial", 10, "bold"))
         self.tx_frame.pack(fill="both", expand=True, padx=10, pady=4)
@@ -441,10 +72,6 @@ class FlashTab:
         sensor_sb.pack(side="right", fill="y")
         self.sensor_canvas.pack(side="left", fill="both", expand=True)
 
-        self.sensor_rows = []
-        self._flashing = False
-
-        # --- Drive / actions ---
         self.drive_frame = tk.LabelFrame(self.frame, text="Target Drive",
                                          font=("Arial", 10, "bold"))
         self.drive_frame.pack(fill="x", padx=10, pady=4)
@@ -465,7 +92,6 @@ class FlashTab:
                   bg="#2196F3", fg="white", font=("Arial", 10, "bold"),
                   width=10).pack(side="right", padx=4)
 
-        # --- Status log ---
         self.log_frame = tk.LabelFrame(self.frame, text="Status", font=("Arial", 10, "bold"))
         self.log_frame.pack(fill="x", padx=10, pady=(4, 10))
 
@@ -475,10 +101,6 @@ class FlashTab:
         self.log_text.config(yscrollcommand=log_sb.set)
         log_sb.pack(side="right", fill="y")
         self.log_text.pack(side="left", fill="both", expand=True, padx=4, pady=4)
-
-    # -------------------------------------------------------------------
-    # Internal helpers
-    # -------------------------------------------------------------------
 
     def log(self, msg):
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -497,7 +119,6 @@ class FlashTab:
                                after=self.role_frame)
 
     def _refresh_sensor_list(self):
-        """Rebuild the visible sensor rows from self.sensors."""
         for row_info in self.sensor_rows:
             row_info["frame"].destroy()
         self.sensor_rows.clear()
@@ -534,117 +155,16 @@ class FlashTab:
         del self.sensors[idx]
         self._refresh_sensor_list()
 
-    # -------------------------------------------------------------------
-    # Add Sensor dialog
-    # -------------------------------------------------------------------
-
     def _add_sensor_dialog(self):
         if not self.templates:
             self.log("No sensor templates found in hardware/sensor_templates/")
             return
 
-        dialog = tk.Toplevel(self.app.root)
-        dialog.title("Add Sensor")
-        dialog.geometry("420x360")
-        dialog.grab_set()
-
-        tk.Label(dialog, text="Select sensor type:",
-                 font=("Arial", 10, "bold")).pack(pady=(12, 4))
-
-        listbox = tk.Listbox(dialog, font=("Consolas", 10), selectmode="single",
-                             height=min(len(self.templates), 6))
-        for tmpl in self.templates:
-            listbox.insert("end", tmpl["name"])
-        listbox.select_set(0)
-        listbox.pack(padx=16, fill="x")
-
-        param_frame = tk.LabelFrame(dialog, text="Parameters", font=("Arial", 9, "bold"))
-        param_frame.pack(fill="x", padx=16, pady=(8, 4))
-
-        param_widgets = {}
-        selected_idx = [None]
-
-        def on_type_select(event=None):
-            sel = listbox.curselection()
-            if not sel:
-                # Focus transitions (e.g. picking a value in a readonly Combobox)
-                # can fire <<ListboxSelect>> with no selection. Don't rebuild —
-                # destroying the param widgets here loses the user's input.
-                return
-            idx = sel[0]
-            if idx == selected_idx[0]:
-                return
-            selected_idx[0] = idx
-
-            for w in param_frame.winfo_children():
-                w.destroy()
-            param_widgets.clear()
-
-            tmpl = self.templates[idx]
-
-            if not tmpl["params"]:
-                tk.Label(param_frame, text="No configurable parameters",
-                         font=("Arial", 9), fg="#888888").pack(pady=4)
-                return
-
-            for p in tmpl["params"]:
-                row = tk.Frame(param_frame)
-                row.pack(fill="x", padx=8, pady=2)
-                tk.Label(row, text="{}:".format(p["label"]),
-                         font=("Arial", 9)).pack(side="left")
-
-                if p["type"] == "pin":
-                    var = tk.StringVar(value=p["default"])
-                    ttk.Combobox(row, textvariable=var, values=BOARD_PINS,
-                                 width=6, font=("Consolas", 9),
-                                 state="readonly").pack(side="right", padx=4)
-                    param_widgets[p["key"]] = var
-                elif p["type"] == "percent":
-                    var = tk.IntVar(value=int(p["default"]))
-                    tk.Spinbox(row, from_=0, to=100, textvariable=var,
-                               width=5, font=("Arial", 9)).pack(side="right", padx=4)
-                    param_widgets[p["key"]] = var
-                elif p["type"] == "number":
-                    var = tk.StringVar(value=p["default"])
-                    tk.Entry(row, textvariable=var, width=8,
-                             font=("Consolas", 9)).pack(side="right", padx=4)
-                    param_widgets[p["key"]] = var
-
-        listbox.bind("<<ListboxSelect>>", on_type_select)
-        on_type_select()
-
-        error_var = tk.StringVar(value="")
-        tk.Label(dialog, textvariable=error_var, fg="red",
-                 font=("Arial", 9)).pack(pady=(0, 2))
-
-        def on_add():
-            idx = selected_idx[0]
-            if idx is None:
-                return
-            tmpl = self.templates[idx]
-
-            for existing in self.sensors:
-                if existing["template"]["channel"] == tmpl["channel"]:
-                    error_var.set("Channel '{}' is already added.".format(tmpl["channel"]))
-                    return
-
-            values = {key: var.get() for key, var in param_widgets.items()}
-            self.sensors.append({"template": tmpl, "param_values": values})
+        def on_add(sensor):
+            self.sensors.append(sensor)
             self._refresh_sensor_list()
-            dialog.destroy()
 
-        btn_frame = tk.Frame(dialog)
-        btn_frame.pack(pady=8)
-        tk.Button(btn_frame, text="Add", command=on_add, bg="#4CAF50", fg="white",
-                  font=("Arial", 9, "bold"), width=8).pack(side="left", padx=6)
-        tk.Button(btn_frame, text="Cancel", command=dialog.destroy,
-                  font=("Arial", 9), width=8).pack(side="left", padx=6)
-
-        dialog.wait_window()
-
-    # -------------------------------------------------------------------
-    # Populate from a saved flash record
-    # -------------------------------------------------------------------
+        open_add_sensor_dialog(self.app.root, self.templates, self.sensors, on_add)
 
     def load_from_flash_record(self, record):
         """Populate the form from a `flashed_nodes` record. Returns True on success."""
@@ -654,17 +174,7 @@ class FlashTab:
         self.lab_id_var.set(int(record.get("lab_id", 1)))
         self.node_id_var.set(int(record.get("node_id", 1)))
 
-        templates_by_name = {t["name"]: t for t in self.templates}
-        new_sensors = []
-        missing = []
-        for s in record.get("sensors", []):
-            tmpl = templates_by_name.get(s.get("template_name"))
-            if tmpl is None:
-                missing.append(s.get("template_name") or s.get("channel") or "?")
-                continue
-            new_sensors.append({"template": tmpl, "param_values": dict(s.get("params", {}))})
-
-        self.sensors = new_sensors
+        self.sensors, missing = match_sensor_records(record.get("sensors", []), self.templates)
         self._refresh_sensor_list()
 
         label = record.get("name") or "Lab {}, Node {}".format(
@@ -677,10 +187,6 @@ class FlashTab:
             self.log("Loaded '{}' from flash history. Set drive and click Flash.".format(label))
         return True
 
-    # -------------------------------------------------------------------
-    # Drive scan
-    # -------------------------------------------------------------------
-
     def _scan_drives(self):
         self.log("Scanning for CircuitPython boards...")
         found = scan_drives()
@@ -690,10 +196,6 @@ class FlashTab:
                 ", ".join("{}:".format(d) for d in found)))
         else:
             self.log("No CircuitPython boards found (no boot_out.txt detected).")
-
-    # -------------------------------------------------------------------
-    # Code preview
-    # -------------------------------------------------------------------
 
     def _preview_code(self):
         if self.role_var.get() == "receiver":
@@ -708,180 +210,84 @@ class FlashTab:
         node_id = self.node_id_var.get()
         config_code = compose_config_py(lab_id, node_id, self.sensors)
         sensors_code = compose_sensors_py(self.sensors)
-
-        preview = tk.Toplevel(self.app.root)
-        preview.title("Code Preview")
-        preview.geometry("600x500")
-
-        nb = ttk.Notebook(preview)
-        nb.pack(fill="both", expand=True, padx=8, pady=8)
-
-        for title, code in [("config.py", config_code), ("sensors.py", sensors_code)]:
-            tab = ttk.Frame(nb)
-            nb.add(tab, text="  {}  ".format(title))
-
-            text_w = tk.Text(tab, font=("Consolas", 9), wrap="none",
-                             bg="#1e1e1e", fg="#cccccc")
-            text_w.insert("1.0", code)
-            text_w.config(state="disabled")
-
-            ysb = tk.Scrollbar(tab, orient="vertical", command=text_w.yview)
-            xsb = tk.Scrollbar(tab, orient="horizontal", command=text_w.xview)
-            text_w.config(yscrollcommand=ysb.set, xscrollcommand=xsb.set)
-
-            ysb.pack(side="right", fill="y")
-            xsb.pack(side="bottom", fill="x")
-            text_w.pack(fill="both", expand=True)
-
-    # -------------------------------------------------------------------
-    # Post-flash name dialog
-    # -------------------------------------------------------------------
-
-    def _show_name_dialog(self, lab_id, node_id, sensors, prefill=None):
-        """Prompt for a required, unique name for the freshly flashed node."""
-        dialog = tk.Toplevel(self.app.root)
-        dialog.title("Name This Node")
-        dialog.geometry("380x190")
-        dialog.resizable(False, False)
-        dialog.grab_set()
-
-        tk.Label(
-            dialog,
-            text="Flash complete — Lab {}, Node {}".format(lab_id, node_id),
-            font=("Arial", 10, "bold"),
-        ).pack(pady=(14, 4))
-        tk.Label(dialog, text="Name this node (required, must be unique):",
-                 font=("Arial", 9)).pack()
-
-        name_var = tk.StringVar(value=prefill or "")
-        name_entry = tk.Entry(dialog, textvariable=name_var, font=("Arial", 10), width=28)
-        name_entry.pack(pady=(6, 4))
-        name_entry.focus_set()
-        name_entry.icursor("end")
-
-        error_var = tk.StringVar(value="")
-        tk.Label(dialog, textvariable=error_var, fg="red", font=("Arial", 9)).pack()
-
-        def commit():
-            name = name_var.get().strip()
-            if not name:
-                error_var.set("Name is required.")
-                return
-            if name_in_use(self.app.flashed_nodes_ref(), name,
-                           exclude_pair=(lab_id, node_id)):
-                error_var.set("That name is already used by another flash record.")
-                return
-            dialog.destroy()
-            self.app.record_flash(lab_id, node_id, name, sensors)
-
-        name_entry.bind("<Return>", lambda _e: commit())
-
-        btn_frame = tk.Frame(dialog)
-        btn_frame.pack(pady=(4, 8))
-        tk.Button(
-            btn_frame, text="Save", font=("Arial", 9, "bold"), bg="#4CAF50", fg="white", width=8,
-            command=commit,
-        ).pack(side="left", padx=6)
-
-        dialog.wait_window()
-
-    # -------------------------------------------------------------------
-    # Flash
-    # -------------------------------------------------------------------
+        open_code_preview(self.app.root, config_code, sensors_code)
 
     def _flash(self):
         if self._flashing:
             self.log("Flash already in progress.")
             return
 
-        drive = self.drive_var.get().strip().upper()
+        drive = self.drive_var.get().strip().upper().rstrip(":\\/")
         if not drive:
             self.log("Enter a drive letter first.")
             return
 
-        drive = drive.rstrip(":\\/")
         mount = "{}:/".format(drive)
-
         if not os.path.isdir(mount):
             self.log("Drive {}: is not accessible.".format(drive))
             return
 
-        role = self.role_var.get()
-
-        if role == "transmitter":
-            if not self.sensors:
-                self.log("Add at least one sensor before flashing.")
-                return
-            lab_id = self.lab_id_var.get()
-            node_id = self.node_id_var.get()
-
-            remembered = self.app.remembered_nodes_ref()
-            flashed = self.app.flashed_nodes_ref()
-            is_reflash = False
-            if id_in_use(remembered, lab_id, node_id):
-                has_history = any(
-                    r.get("lab_id") == lab_id and r.get("node_id") == node_id
-                    for r in flashed
-                )
-                if has_history:
-                    existing_name = remembered.get(f"{lab_id},{node_id}", {}).get("name") \
-                        or "this node"
-                    if not messagebox.askyesno(
-                        "Re-flash existing node",
-                        "Lab {}, Node {} is already flashed as '{}'.\n\n"
-                        "Re-flash this node?".format(lab_id, node_id, existing_name),
-                        parent=self.app.root,
-                    ):
-                        self.log("Flash cancelled.")
-                        return
-                    is_reflash = True
-                else:
-                    existing_name = remembered.get(f"{lab_id},{node_id}", {}).get("name")
-                    label = existing_name or "Lab {}, Node {}".format(lab_id, node_id)
-                    messagebox.showerror(
-                        "ID already in use",
-                        "Lab {}, Node {} is already known ({}).\n\n"
-                        "Pick a different ID, or Forget that node in the Node Pairing tab first."
-                        .format(lab_id, node_id, label),
-                        parent=self.app.root,
-                    )
-                    self.log("Flash blocked: Lab {}, Node {} already in use.".format(lab_id, node_id))
-                    return
-
-            sensors_snapshot = list(self.sensors)
-            existing_name = remembered.get(f"{lab_id},{node_id}", {}).get("name")
-            self.log("Flashing transmitter (Lab {}, Node {}) -> {}".format(
-                lab_id, node_id, mount))
-
-            def on_success():
-                if is_reflash:
-                    self.app.root.after(
-                        0,
-                        lambda: self.app.record_flash(lab_id, node_id, existing_name, sensors_snapshot),
-                    )
-                else:
-                    self.app.root.after(
-                        0,
-                        lambda: self._show_name_dialog(lab_id, node_id, sensors_snapshot),
-                    )
-
-            self._flashing = True
-
-            def _run_tx():
-                try:
-                    flash_transmitter(mount, lab_id, node_id, sensors_snapshot, self.log, on_success)
-                finally:
-                    self._flashing = False
-
-            threading.Thread(target=_run_tx, daemon=True).start()
+        if self.role_var.get() == "transmitter":
+            self._flash_transmitter(mount)
         else:
             self.log("Flashing receiver -> {}".format(mount))
-            self._flashing = True
+            self._run_flash(lambda: flash_receiver(mount, self.log))
 
-            def _run_rx():
-                try:
-                    flash_receiver(mount, self.log)
-                finally:
-                    self._flashing = False
+    def _flash_transmitter(self, mount):
+        if not self.sensors:
+            self.log("Add at least one sensor before flashing.")
+            return
 
-            threading.Thread(target=_run_rx, daemon=True).start()
+        lab_id = self.lab_id_var.get()
+        node_id = self.node_id_var.get()
+        remembered = self.app.remembered_nodes_ref()
+        flashed = self.app.flashed_nodes_ref()
+
+        status, existing_name = check_transmitter_id_status(
+            remembered, flashed, lab_id, node_id
+        )
+
+        is_reflash = False
+        if status == "reflash":
+            if not confirm_reflash(self.app.root, lab_id, node_id, existing_name):
+                self.log("Flash cancelled.")
+                return
+            is_reflash = True
+        elif status == "blocked":
+            show_id_blocked(self.app.root, lab_id, node_id, existing_name)
+            self.log("Flash blocked: Lab {}, Node {} already in use.".format(lab_id, node_id))
+            return
+
+        sensors_snapshot = list(self.sensors)
+        self.log("Flashing transmitter (Lab {}, Node {}) -> {}".format(
+            lab_id, node_id, mount))
+
+        def on_success():
+            if is_reflash:
+                self.app.root.after(
+                    0,
+                    lambda: self.app.record_flash(lab_id, node_id, existing_name, sensors_snapshot),
+                )
+            else:
+                self.app.root.after(
+                    0,
+                    lambda: open_name_dialog(
+                        self.app.root, lab_id, node_id, self.app.flashed_nodes_ref(),
+                        lambda name: self.app.record_flash(lab_id, node_id, name, sensors_snapshot),
+                    ),
+                )
+
+        self._run_flash(lambda: flash_transmitter(
+            mount, lab_id, node_id, sensors_snapshot, self.log, on_success
+        ))
+
+    def _run_flash(self, target):
+        self._flashing = True
+
+        def _runner():
+            try:
+                target()
+            finally:
+                self._flashing = False
+
+        threading.Thread(target=_runner, daemon=True).start()

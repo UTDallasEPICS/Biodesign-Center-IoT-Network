@@ -5,6 +5,9 @@
 # libraries:
 #
 # param: pin | Analog Pin | pin | A0
+# param: sensitivity | Sensor sensitivity | number | .026667
+# param: VBase | Sensor Voltage Offset | number | 2.521263
+# param: MCUVoltage | Voltage of Microcontroller | number | 3.3
 
 # --- imports ---
 import time
@@ -12,9 +15,6 @@ from analogio import AnalogIn
 
 # --- setup ---
 power_pin = AnalogIn(board.{pin})
-VBase = 2.521263
-Sensitivity = 2/75.0
-MCUVoltage = 3.3
 
 # --- read ---
 def read_current_amps():
