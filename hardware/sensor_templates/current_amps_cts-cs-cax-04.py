@@ -5,12 +5,13 @@
 # libraries:
 #
 # param: pin | Analog Pin | pin | A0
-# param: sensitivity | Sensor sensitivity | number | .026667
-# param: VBase | Sensor Voltage Offset | number | 2.521263
+# param: sensitivity | Sensor sensitivity | number | 0.026667
+# param: VBase | Sensor Voltage Offset | number | 2.5167315
 # param: MCUVoltage | Voltage of Microcontroller | number | 3.3
 
 # --- imports ---
 import time
+import math
 from analogio import AnalogIn
 
 # --- setup ---
@@ -22,9 +23,8 @@ def read_current_amps():
     samples = 300
     interval = 3.0 / samples
     for _ in range(samples):
-        # Vout = (power_pin.value / 65535.0) * MCUVoltage
-        # Amps = (Vout - VBase) / Sensitivity
-        # total += Amps
-        total += power_pin.value
+        Vout = (power_pin.value / 65535.0) * {MCUVoltage}
+        Amps = (Vout - {VBase}) / {sensitivity}
+        total += Amps * Amps
         time.sleep(interval)
-    return (total / samples)
+    return math.sqrt(total / samples)*1000
