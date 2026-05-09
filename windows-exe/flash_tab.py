@@ -135,6 +135,9 @@ class FlashTab:
                 val = params.get(p["key"], p["default"])
                 if p["type"] == "percent":
                     param_parts.append("{}: {}%".format(p["label"], val))
+                elif p["type"] == "boolean":
+                    display = "Yes" if str(val).lower() in ("true", "1") else "No"
+                    param_parts.append("{}: {}".format(p["label"], display))
                 else:
                     param_parts.append("{}: {}".format(p["label"], val))
 

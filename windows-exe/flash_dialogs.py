@@ -101,6 +101,11 @@ def open_add_sensor_dialog(parent, templates, existing_sensors, on_add):
                 tk.Entry(row, textvariable=var, width=8,
                          font=("Consolas", 9)).pack(side="right", padx=4)
                 param_widgets[p["key"]] = var
+            elif p["type"] == "boolean":
+                default_bool = p["default"].strip().lower() not in ("false", "0", "")
+                var = tk.BooleanVar(value=default_bool)
+                tk.Checkbutton(row, variable=var, font=("Arial", 9)).pack(side="right", padx=4)
+                param_widgets[p["key"]] = var
 
     listbox.bind("<<ListboxSelect>>", on_type_select)
     on_type_select()
