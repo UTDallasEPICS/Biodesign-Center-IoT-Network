@@ -25,6 +25,28 @@ The system has three physical layers:
 
 ## Functional Requirements
 
+| ID | Requirement | How it is met |
+|----|-------------|---------------|
+| **FR-01** | The product will allow for the sensing of fridge temperature. The sensor will be able to determine the ambient temperature inside the fridge. | DS18B20 OneWire temperature sensor template (`hardware/sensor_templates/temperature_ds18b20.py`). |
+| **FR-02** | The product will allow for the sensing of fridge door status. The sensor will be able to determine if the fridge door is opened or closed. | Digital push-button door sensor template (`hardware/sensor_templates/door_button.py`). |
+| **FR-03** | The product will allow for the sensing of colored light. The sensor will be able to detect the blue light from the doorbell when it rings. | TSL2591 I2C light event sensor template with configurable threshold (`hardware/sensor_templates/light_event_tsl2591.py`). |
+| **FR-04** | The product will collect hours of operation data from multiple 3D printers. The hours of operation of the resin 3D printers will be tracked through current sensing. | CTS-CS-CAX-04 current transformer template with RMS sensing and calibration mode (`hardware/sensor_templates/current_amps_cts-cs-cax-04.py`). |
+| **FR-05** | Sensor readings will be displayed on the laptop. | Data Stream tab in the host app shows a live scrolling log; Grafana Cloud dashboard displays all sensor data. |
+| **FR-06** | The product will have a 3D printed enclosure that can be opened or closed as well as a USB port. This will allow easy access to the internals of the sensor for troubleshooting. | Hardware design (out of software scope). The Flash Device tab supports re-flashing once the board is removed from the enclosure. |
+| **FR-07** | The sensors will be a peripheral device that could be attached to the equipment. The sensors will not be hard-wired into the equipment for easy installation and no interference. | Transmitter nodes communicate over 915 MHz LoRa radio; no physical wiring to monitored equipment is required. |
+| **FR-08** | The product will send sensor data to a Windows 11 Laptop. The data from all the sensors will be sent wirelessly to a Windows 11 laptop which will have a local server that will then send the sensor data to the cloud dashboard. | Receiver node bridges LoRa packets to USB serial; the host app (`windows-exe/`) reads the serial output on Windows. |
+| **FR-09** | The user can check the local server, which contains a list of broadcasting sensors that can be selected from. The sensors will connect to the local server through LoRa. | Receiver Pairing tab (tab 2) lists all nodes discovered over LoRa this session or loaded from saved state, with per-node listen toggle. |
+| **FR-10** | The system will send the collected sensor data from the local server to a cloud dashboard. Local server will collect the sensor data and send it to the cloud dashboard which could display the data. | Host app formats readings as InfluxDB line protocol and pushes to Grafana Cloud (`windows-exe/grafana.py`). |
+| **FR-11** | The system will allow users to log in. The users will be able to log in to access the dashboard, making the sensor information secure. | Grafana Cloud authentication — dashboard access requires a Grafana login. |
+| **FR-12** | The system will allow users to view sensor data. The users will be able to view the sensor data on a dashboard (temperature, door status, doorbell status, hours of operation, and sensor status for each sensor). | All sensor readings and node status metrics are pushed to Grafana Cloud and visible on the dashboard. |
+| **FR-13** | The sensors will be powered by standard 120v plugs. The sensors will be continuously powered from wall outlets and will not have to rely on batteries. | Hardware design (out of software scope). |
+| **FR-14** | The system will allow users to view if a sensor is down. The dashboard will display the status of the sensor. | Node status metrics (online / degraded / offline) are pushed to Grafana every 30 seconds (`windows-exe/grafana.py`). |
+| **FR-15** | The system will send a push notification when the temperature crosses a threshold. A text message or email alert will be sent about the status of the temperature in the fridge. | Alert rules are configured in Grafana Cloud (not part of this codebase). Grafana supports email and webhook notifications when a metric crosses a defined threshold. |
+
+---
+
+## Host Application Specification
+
 ### Tab 1 — Data Stream
 
 - Start and stop the serial read loop (connects to the receiver over USB)
