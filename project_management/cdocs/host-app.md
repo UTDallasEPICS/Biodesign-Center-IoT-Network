@@ -45,9 +45,12 @@ All three share a `threading.Event` stop signal. GUI updates (`self.log`) use `r
 
 1. Receives `port` as a parameter (resolved by `start_stream` before thread launch).
 2. Open serial at 115200 baud.
-3. Read lines. Skip empty lines and lines starting with `[` (debug output from CircuitPython).
+3. Read lines. Skip empty lines.
+   - Lines starting with `[` are logged as "Serial: …" and not decoded (the current receiver firmware does not emit bracket-prefixed lines — kept as a defensive filter).
+   - Lines starting with `#` are logged as "Receiver: …" and not decoded. The receiver emits `"# alive"` heartbeats every 10 seconds of idle and `"# RECEIVER FAULT: …"` before self-resetting.
 4. Strip spaces, uppercase → pass to `decode_lora()`.
 5. Put decoded dict onto `packet_queue` (regardless of decode error — consumer checks for `"error"` key).
+6. **Silence detection:** if no line (of any kind) is received for `SILENCE_WARN_SECONDS` (default 30), log `"No data from receiver for 30s — receiver may be hung"`. Warning fires once per silence event; reset on next received line, which logs `"Receiver responded after silence"`. With the receiver's 10-second heartbeat, normal operation should never trigger this — a fired warning means the receiver itself is dead.
 
 ---
 
@@ -84,6 +87,8 @@ Module-level state:
 - `listened_nodes: set[(lab_id, node_id)]` — transmitters whose packets are pushed to Grafana. Persisted.
 - `remembered_nodes: dict["lab_id,node_id" → {"last_seen": float|None, "name": str|None}]` — persisted across sessions. Carries optional user-assigned names.
 - `flashed_nodes: list[dict]` — ordered flash history. Each record: `{lab_id, node_id, name, flashed_at, sensors: [{channel, template_name, params}]}`.
+
+**Thread safety note:** These dicts and the set are shared across the GUI thread, `consumer_thread`, and `status_thread` with no explicit locking. Python's GIL protects simple get/set operations, but compound read-modify-write sequences are not atomic. This is an existing limitation; avoid adding patterns that depend on multi-step atomicity across these globals.
 
 `node_display_name(lab_id, node_id)` returns `"Name (Lab X/Node Y)"` if a name is stored, else `"Lab X, Node Y"`. Used in both the pairing tab and the broadcast strip.
 

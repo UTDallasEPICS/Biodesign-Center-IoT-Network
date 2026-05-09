@@ -9,9 +9,12 @@ import time
 import board
 import busio
 import digitalio
+import microcontroller
 import adafruit_rfm9x
 
 from config import RADIO_FREQ_MHZ, RECEIVE_TIMEOUT, RECEIVER_NODE
+
+ALIVE_INTERVAL = 10.0
 
 # ---------------------------------------------------------------------------
 # Hardware init
@@ -34,15 +37,28 @@ print("-" * 72)
 # Main loop
 # ---------------------------------------------------------------------------
 
-while True:
-    raw = rfm9x.receive(timeout=RECEIVE_TIMEOUT, with_ack=True)
-    if raw is None:
-        continue
+last_print = time.monotonic()
 
-    led.value = True
+try:
+    while True:
+        raw = rfm9x.receive(timeout=RECEIVE_TIMEOUT, with_ack=True)
 
-    # Convert raw bytes to space-separated hex string
-    hex_str = " ".join("{:02X}".format(b) for b in raw)
-    print(hex_str)
+        if raw is None:
+            now = time.monotonic()
+            if now - last_print >= ALIVE_INTERVAL:
+                print("# alive")
+                last_print = now
+            continue
 
-    led.value = False
+        led.value = True
+        hex_str = " ".join("{:02X}".format(b) for b in raw)
+        print(hex_str)
+        last_print = time.monotonic()
+        led.value = False
+
+except Exception as e:
+    # Hardware fault (SPI/radio/USB CDC). Self-reset so the receiver recovers
+    # without manual intervention; host sees the # line and reset confirms it.
+    print("# RECEIVER FAULT: {}".format(e))
+    time.sleep(1)
+    microcontroller.reset()

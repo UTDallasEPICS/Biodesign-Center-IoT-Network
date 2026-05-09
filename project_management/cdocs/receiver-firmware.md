@@ -10,9 +10,10 @@ CircuitPython on Adafruit Feather RP2040 + RFM95 LoRa 915 MHz. Files: `code.py`,
 2. Call `rfm9x.receive(timeout=RECEIVE_TIMEOUT, with_ack=True)` in a loop. The library automatically sends an ACK back to the transmitter.
 3. On packet receipt, convert raw bytes to space-separated uppercase hex and print to USB serial.
 4. Blink LED on each received packet.
-5. On `None` (timeout), continue immediately — no sleep.
+5. On `None` (timeout), continue. If no line has been printed for `ALIVE_INTERVAL` seconds (default 10), print `"# alive"` so the host can distinguish "idle but healthy" from "receiver hung."
+6. The main loop is wrapped in `try/except`. On any unhandled exception, the receiver prints `"# RECEIVER FAULT: <error>"` and calls `microcontroller.reset()` to recover without manual intervention.
 
-Output format per packet: `"01 01 01 01 02 01 00 01 C5 02 00 00 00\r\n"` (uppercase, space-separated, newline-terminated).
+Output format per packet: `"01 01 01 01 02 01 00 01 C5 02 00 00 00\r\n"` (uppercase, space-separated, newline-terminated). Lines beginning with `#` are out-of-band status (heartbeat, fault), not packet data.
 
 ---
 

@@ -40,9 +40,9 @@ All transmissions use `MSG_DATA`. Periodic keep-alive sends are also `MSG_DATA` 
 | 0x01 | `CH_TEMPERATURE` | Signed int24, °C × 100                | Yes         |
 | 0x02 | `CH_DOOR`        | 0x000001 = open, 0x000000 = closed     | Yes         |
 | 0x03 | `CH_LIGHT_LEVEL` | Unsigned int24, raw ADC count          | No          |
-| 0x04 | `CH_LIGHT_EVENT` | Bool (0/1), doorbell ring              | No          |
+| 0x04 | `CH_LIGHT_EVENT` | Bool (0/1), light detection event      | Yes         |
 | 0x05 | `CH_CURRENT_DRAW`| Bool (0/1), drawing power             | No          |
-| 0x06 | `CH_CURRENT_AMPS`| Unsigned int24, milliamps             | No          |
+| 0x06 | `CH_CURRENT_AMPS`| Unsigned int24, milliamps             | Yes         |
 
 ---
 
@@ -58,7 +58,9 @@ All transmissions use `MSG_DATA`. Periodic keep-alive sends are also `MSG_DATA` 
 
 ## Decoding (`hex_parse.py` — host app only)
 
-`decode_lora(hex_string)` parses a space-separated or compact hex string. Returns a dict with `version`, `lab_id`, `node_id`, `msg_type` (string: `"data_report"`, `"heartbeat"`, `"error"`, `"unknown"`), `channel_count`, `channels`. Each channel has `channel_type` (int), `metric` (string), `value` (float or bool). On error returns `{"error": "..."}` rather than raising.
+`decode_lora(hex_string)` parses a space-separated or compact hex string. Returns a dict with `version`, `lab_id`, `node_id`, `msg_type` (string: `"data_report"`, `"error"`, `"unknown"`), `channel_count`, `channels`. Each channel has `channel_type` (int), `metric` (string), `value` (float or bool). On error returns `{"error": "..."}` rather than raising.
+
+**Warning — metric name divergence:** `hex_parse.py` uses different metric names than `packet.py` channel names. Notable differences: channel 0x04 is `"doorbell"` in hex_parse.py vs `"light_event"` in packet.py; 0x03 is `"light"` vs `"light_level"`; 0x05 is `"power"` vs `"current_draw"`. These names flow into Grafana metric labels (e.g. `biodesign_doorbell`). If you need the canonical name, use `packet.py`.
 
 ---
 

@@ -29,22 +29,32 @@ Radio CS/RST: `board.RFM_CS`, `board.RFM_RST`. SPI: `board.SCK/MOSI/MISO`. LED: 
 
 ## Sensors (`sensors.py`)
 
-`read_temperature()` → `float` (°C). TMP36 on `board.A0`: `voltage = (raw * 3.3) / 65536`, then `(voltage - 0.5) * 100`.
+`sensors.py` is a **generated file** produced by the Flash Device tab in the host app. It is not hand-edited or checked into source. The file is composed from one or more sensor templates in `hardware/sensor_templates/` using user-chosen parameters. See `cdocs/flash-tool.md` for the composition rules.
 
-`read_door()` → `bool` (True = open). Button on `board.D12` with `Pull.UP`. `True` when released (open), `False` when pressed (closed).
+The generated file always exports:
+- `read_<channel>()` — one read function per sensor (return type depends on channel)
+- `READERS: dict[channel_name → callable]` — maps channel names to their read functions
+- `TRIGGER_TYPE: dict[channel_name → "edge"]` — populated only for edge-triggered sensors; channels not in this dict have no trigger
 
-To adapt to different hardware: replace the function bodies. Signatures and return types must not change.
+Currently implemented channels (each has a sensor template):
+
+| Channel | Return Type | Template |
+|---------|-------------|---------|
+| `temperature` | `float` (°C) | `temperature_ds18b20.py` |
+| `door` | `bool` (True=open) | `door_button.py` |
+| `light_event` | `bool` (True=detected) | `light_event_tsl2591.py` |
+| `current_amps` | `float` (milliamps) | `current_amps_cts-cs-cax-04.py` |
 
 ---
 
 ## Configuration (`config.py`)
 
-Edit before flashing each board. No other files need to change between nodes.
+`config.py` is a **generated file** produced by the Flash Device tab. It is not hand-edited directly — change the Lab ID, Node ID, and sensor list in the GUI, then re-flash.
 
 | Field | Purpose |
 |-------|---------|
 | `LAB_ID` | Lab identifier (1–255, 0 reserved) |
-| `NODE_ID` | Unique ID for this transmitter board (1–255). Edit before flashing each board |
+| `NODE_ID` | Unique ID for this transmitter board (1–255). Must be unique per lab |
 | `RADIO_FREQ_MHZ` | Must match receiver (915.0) |
 | `TX_POWER` | dBm (5–23). Keep low if USB disconnects during TX |
 | `HEARTBEAT_INTERVAL` | Max seconds of silence before heartbeat (default 30) |
@@ -56,7 +66,7 @@ Edit before flashing each board. No other files need to change between nodes.
 | `SENSORS` | List of sensor defs: one entry per physical sensor on this board |
 
 Each entry in `SENSORS`:
-- `channel`: str — currently `"temperature"` and `"door"` are implemented
+- `channel`: str — must match a key in `READERS` in `sensors.py`
 
 ---
 

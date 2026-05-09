@@ -21,6 +21,9 @@ def scan_ports(log_fn):
     return None, candidates
 
 
+SILENCE_WARN_SECONDS = 30.0
+
+
 def read_from_receiver(log_fn, stop_event, port, packet_queue):
     """Read LoRa packets from the receiver via USB serial. Decoded packets are put onto packet_queue."""
 
@@ -33,6 +36,9 @@ def read_from_receiver(log_fn, stop_event, port, packet_queue):
         ser = serial.Serial(port, 115200, timeout=1)
         log_fn(f"Connected to {port}")
 
+        last_data = time.monotonic()
+        silence_warned = False
+
         while not stop_event.is_set() and ser.is_open:
             try:
                 if ser.in_waiting:
@@ -42,8 +48,17 @@ def read_from_receiver(log_fn, stop_event, port, packet_queue):
                     if not line:
                         continue
 
+                    last_data = time.monotonic()
+                    if silence_warned:
+                        log_fn("Receiver responded after silence")
+                        silence_warned = False
+
                     if line.startswith("["):
                         log_fn(f"Serial: {line}")
+                        continue
+
+                    if line.startswith("#"):
+                        log_fn(f"Receiver: {line}")
                         continue
 
                     log_fn(f"Raw hex: {line}")
@@ -57,6 +72,9 @@ def read_from_receiver(log_fn, stop_event, port, packet_queue):
                     except Exception as e:
                         log_fn(f"Decode exception: {e}")
                 else:
+                    if not silence_warned and time.monotonic() - last_data > SILENCE_WARN_SECONDS:
+                        log_fn(f"No data from receiver for {SILENCE_WARN_SECONDS:.0f}s — receiver may be hung")
+                        silence_warned = True
                     time.sleep(0.1)
 
             except Exception as e:
