@@ -1,7 +1,4 @@
 .env
 venv
-windows-exe/dist
-windows-exe/build
-dist
 build
 CLAUDE.md

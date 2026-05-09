@@ -120,14 +120,6 @@ The Delete button on the same tab removes only the saved record (the node remain
 2. Copy `hardware/shared/packet.py` to the board.
 3. Copy `adafruit_rfm9x.mpy` from `hardware/libraries/` to `{mount}lib/`.
 
-### Shell Script (`flash.sh`)
-
-> **Note:** Transmitter flashing via `flash.sh` is currently broken. The script expects firmware source files in `hardware/<type>-transmitter/` subdirectories. Those subdirectories no longer exist — transmitter firmware is now generated on-the-fly by the GUI flash tool and never stored on disk. Use the GUI for all transmitter flashing. `flash.sh` still works for receiver flashing.
-
-1. Detect OS and ask for mount point.
-2. Auto-detect role from existing files on the board, or ask user.
-3. Copy role-specific files plus shared files. No library copying or code generation.
-
 ---
 
 ## Drive Detection
