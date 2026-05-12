@@ -111,7 +111,7 @@ No database is used. Persistent state (node names, listen toggles, flash history
 
 ## Deployment Notes
 
-The host application is distributed as a standalone Windows executable (`windows-exe/dist/app.exe`) built with PyInstaller. No installation is required on the end user's machine beyond copying the `.exe` and a `.env` file.
+The host application is distributed as a standalone Windows executable (`windows-exe/dist/app.exe`) built with PyInstaller. No installation is required on the end user's machine beyond copying the `.exe` file.
 
 ---
 
@@ -121,7 +121,7 @@ The host application is distributed as a standalone Windows executable (`windows
 
 - Python 3.10+ with `pip`
 - A Python virtual environment tool (`venv`)
-- CircuitPython-compatible boards (Adafruit Feather RP2040 + RFM95) for hardware testing
+- Adafruit Feather RP2040 + RFM95 for hardware testing
 - A Grafana Cloud account for dashboard testing
 
 ### 1. Clone the repository
@@ -154,7 +154,7 @@ The `.env` file must be placed in the same directory you build from. If the Graf
 ```
 cd windows-exe
 python -m venv venv
-venv\Scripts\activate      # Windows
+venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
@@ -189,7 +189,7 @@ Download the `.exe` from the `windows-exe/dist/` folder (or build it from source
 
 1. Run the `.exe`.
 2. Plug the microcontroller you want to flash into the computer running the `.exe`.
-   - For current nodes, this will require removing the microcontroller from its enclosure.
+   - For the existing nodes that measure current, this will require removing the microcontroller from its enclosure.
 3. Go to the **Flash Device** tab (tab 4).
 
 **If re-flashing an existing sensor** (e.g., to recalibrate thresholds):
@@ -204,7 +204,7 @@ Download the `.exe` from the `windows-exe/dist/` folder (or build it from source
 3. Select the drive of the microcontroller to flash. **Detect** selects the first detected drive — verify it is the correct one.
 4. Click **Flash**.
 
-> **Note on current sensors:** Current sensors have a calibration mode that outputs the base ADC value when no current is flowing. Take multiple readings and average them. The output is formatted as `2NNNNNN`; the average should be entered as `2.NNNNNN` (insert a decimal point after the first digit).
+> **Note on current sensors:** Current sensors have a calibration mode that outputs the VBase value assuming no current is flowing. Take multiple readings without current through the device and average them. The output is formatted as `2NNNNNN`; the average VBase should be entered as `2.NNNNNN` (insert a decimal point after the first digit).
 
 ---
 
