@@ -87,9 +87,6 @@ The system has three physical layers:
 | Service | Purpose |
 |---------|---------|
 | **Grafana Cloud** | Time-series dashboard for sensor readings and node status. The host app formats data as InfluxDB line protocol and pushes to the Grafana Cloud push endpoint. Credentials (URL, username, API token) are loaded from a `.env` file at runtime. Node status metrics (online / degraded / offline) are pushed every 30 seconds alongside sensor readings. |
-
-No other third-party services (auth providers, payment processors, etc.) are used.
-
 ---
 
 ## Tech Stack
