@@ -63,8 +63,9 @@
 
 | File | Description |
 |------|-------------|
-| [hardware/receiver/code.py](../hardware/receiver/code.py) | Main loop. Listens for LoRa packets and prints raw bytes as space-separated hex strings to USB serial |
+| [hardware/receiver/code.py](../hardware/receiver/code.py) | Main loop. Listens for LoRa packets and prints raw bytes as space-separated hex strings to USB serial. Feeds hardware watchdog each iteration |
 | [hardware/receiver/config.py](../hardware/receiver/config.py) | Receiver configuration: radio frequency and receive timeout |
+| [hardware/receiver/boot.py](../hardware/receiver/boot.py) | Startup-only: bounds `usb_cdc.console.write_timeout` so a stalled host CDC endpoint cannot block `print()` indefinitely |
 
 ---
 

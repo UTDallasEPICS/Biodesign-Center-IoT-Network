@@ -11,10 +11,12 @@ import busio
 import digitalio
 import microcontroller
 import adafruit_rfm9x
+from watchdog import WatchDogMode
 
 from config import RADIO_FREQ_MHZ, RECEIVE_TIMEOUT, RECEIVER_NODE
 
 ALIVE_INTERVAL = 10.0
+WATCHDOG_TIMEOUT = 8.0  # RP2040 hardware max is ~8.3s
 
 # ---------------------------------------------------------------------------
 # Hardware init
@@ -33,6 +35,15 @@ rfm9x.node = RECEIVER_NODE
 print("Receiver ready  freq={} MHz  node={:#04x}  ACK=on".format(RADIO_FREQ_MHZ, RECEIVER_NODE))
 print("-" * 72)
 
+# Hardware watchdog. Primary recovery mechanism: if any operation below
+# (rfm9x.receive, print, etc.) blocks past WATCHDOG_TIMEOUT, the chip resets.
+# The try/except below only catches Python-level exceptions and is the
+# secondary path for catchable faults.
+wdt = microcontroller.watchdog
+wdt.timeout = WATCHDOG_TIMEOUT
+wdt.mode = WatchDogMode.RESET
+wdt.feed()
+
 # ---------------------------------------------------------------------------
 # Main loop
 # ---------------------------------------------------------------------------
@@ -41,6 +52,7 @@ last_print = time.monotonic()
 
 try:
     while True:
+        wdt.feed()
         raw = rfm9x.receive(timeout=RECEIVE_TIMEOUT, with_ack=True)
 
         if raw is None:
@@ -57,8 +69,11 @@ try:
         led.value = False
 
 except Exception as e:
-    # Hardware fault (SPI/radio/USB CDC). Self-reset so the receiver recovers
-    # without manual intervention; host sees the # line and reset confirms it.
+    # Catchable Python-level fault (SPI/radio/USB CDC raising an error).
+    # Self-reset so the receiver recovers without manual intervention.
+    # Non-catchable hangs (blocked print, infinite SPI wait) are handled
+    # by the hardware watchdog, not this branch.
+    wdt.feed()
     print("# RECEIVER FAULT: {}".format(e))
     time.sleep(1)
     microcontroller.reset()

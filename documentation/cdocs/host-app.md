@@ -51,6 +51,7 @@ All three share a `threading.Event` stop signal. GUI updates (`self.log`) use `r
 4. Strip spaces, uppercase → pass to `decode_lora()`.
 5. Put decoded dict onto `packet_queue` (regardless of decode error — consumer checks for `"error"` key).
 6. **Silence detection:** if no line (of any kind) is received for `SILENCE_WARN_SECONDS` (default 30), log `"No data from receiver for 30s — receiver may be hung"`. Warning fires once per silence event; reset on next received line, which logs `"Receiver responded after silence"`. With the receiver's 10-second heartbeat, normal operation should never trigger this — a fired warning means the receiver itself is dead.
+7. **Auto-reconnect:** the connect+read block is wrapped in an outer loop. On `SerialException` or `OSError` (e.g. `ClearCommError` after the receiver self-resets via its hardware watchdog and the USB port re-enumerates), the dead handle is closed, a `"Serial disconnected: …"` line is logged, the reader waits `RECONNECT_DELAY_SECONDS` (default 2), and re-opens the same port. Retries indefinitely until `stop_event` is set. Same port name on retry — no port re-scan, since Windows almost always re-assigns the same COM number to the same physical device.
 
 ---
 
