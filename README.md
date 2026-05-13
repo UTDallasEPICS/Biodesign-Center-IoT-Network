@@ -111,7 +111,7 @@ No database is used. Persistent state (node names, listen toggles, flash history
 
 ## Deployment Notes
 
-The host application is distributed as a standalone Windows executable (`windows-exe/dist/app.exe`) built with PyInstaller. No installation is required on the end user's machine beyond copying the `.exe` file.
+The host application is distributed as a standalone Windows executable (`windows-exe/dist/app.exe`) built with PyInstaller. No installation is required on the end user's machine beyond copying the `.exe` and `.env` file and placing them in the same directory.
 
 ---
 
@@ -211,6 +211,8 @@ Download the `.exe` from the `windows-exe/dist/` folder (or build it from source
 ## How to Set Up the Local Server (Receiver / Host App)
 
 1. Download the `.exe` from `windows-exe/dist/` (or build from source).
+1. Obtain the `.env` with Grafana credentials.
+3. Place the `.env` in the same directory as the `.exe` and then run the `.exe`.
 4. Go to the **Data Stream** tab (tab 1) and click **Start Listening**.
 5. After listening starts, the **Receiver Pairing** tab (tab 2) will begin to populate with all broadcasting sensor nodes.
 6. Select all nodes you want to broadcast to the Grafana dashboard by toggling **Listen** for each one.
